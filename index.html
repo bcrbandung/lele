@@ -1143,7 +1143,7 @@ async function simpanEdit(){
     tx.items?.forEach(i=>{ stokUpdate[i.prodId]=(stokUpdate[i.prodId]||STATE.stok[i.prodId]||0)+i.qty; });
     // Kurangi stok baru
     for(const i of items){
-      stokUpdate[i.prodId]=(stokUpdate[i.prodId]??STATE.stok[i.prodId]||0)-i.qty;
+      stokUpdate[i.prodId]=((stokUpdate[i.prodId]!==undefined?stokUpdate[i.prodId]:STATE.stok[i.prodId])||0)-i.qty;
       if(stokUpdate[i.prodId]<0){alert(`Stok ${i.nama} tidak cukup!`);setSyncStatus('');return;}
     }
 
@@ -1356,7 +1356,7 @@ onValue(ref(db,'stok'), snap=>{
   STATE.stok=snap.val()||{};
   hideLoading();
   renderCurrentPage();
-},{onlyOnce:false});
+});
 
 onValue(ref(db,'stokKon'),  snap=>{STATE.stokKon=snap.val()||{};renderCurrentPage();});
 onValue(ref(db,'tx'),       snap=>{STATE.tx=snap.val()||{};renderCurrentPage();});
