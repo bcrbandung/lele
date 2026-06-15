@@ -195,6 +195,19 @@ tr:last-child td{border-bottom:none;}
 .har-sub{font-size:10px;color:var(--muted);}
 .har-amt{font-weight:800;font-size:14px;color:var(--g2);}
 
+.tx-scroll{max-height:420px;overflow-y:auto;scrollbar-width:thin;scrollbar-color:var(--border) transparent;}
+.tx-scroll::-webkit-scrollbar{width:3px;}
+.tx-scroll::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px;}
+.tx-item{cursor:pointer;border-radius:6px;margin:0 -4px;padding-left:4px;padding-right:4px;transition:background 0.1s;}
+.tx-item:active{background:#f0f5f2;}
+.detail-row{display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid #f0f5f2;font-size:12px;}
+.detail-row:last-child{border-bottom:none;}
+.detail-label{color:var(--muted);font-size:11px;}
+.detail-val{font-weight:600;text-align:right;}
+.detail-product{background:#f8faf9;border-radius:8px;padding:10px 12px;margin-bottom:6px;}
+.detail-product-name{font-weight:600;font-size:12px;}
+.detail-product-sub{font-size:11px;color:var(--muted);margin-top:2px;}
+
 #loading-screen{position:fixed;inset:0;background:var(--g2);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:999;color:white;gap:16px;}
 #loading-screen .ls-icon{font-size:48px;}
 #loading-screen .ls-text{font-size:14px;opacity:0.8;}
@@ -244,8 +257,10 @@ tr:last-child td{border-bottom:none;}
     <div class="sh-title">📋 Transaksi Terakhir</div>
     <button class="btn btn-sm btn-outline" onclick="goPage('page-laporan')">Semua →</button>
   </div>
-  <div class="card" style="padding:4px 12px;" id="recent-tx">
-    <div class="empty"><div class="empty-icon">📭</div><div class="empty-txt">Belum ada transaksi</div></div>
+  <div class="card" style="padding:4px 12px;">
+    <div class="tx-scroll" id="recent-tx">
+      <div class="empty"><div class="empty-icon">📭</div><div class="empty-txt">Belum ada transaksi</div></div>
+    </div>
   </div>
 </div>
 
@@ -293,7 +308,9 @@ tr:last-child td{border-bottom:none;}
       <button class="pill" onclick="filterTx('pembelian',this)">Pembelian</button>
       <button class="pill" onclick="filterTx('rekonsiliasi',this)">Rekon</button>
     </div>
-    <div class="card" style="padding:4px 12px;" id="list-tx"><div class="empty"><div class="empty-icon">📭</div><div class="empty-txt">Belum ada data</div></div></div>
+    <div class="card" style="padding:4px 12px;">
+      <div class="tx-scroll" id="list-tx"><div class="empty"><div class="empty-icon">📭</div><div class="empty-txt">Belum ada data</div></div></div>
+    </div>
   </div>
   <div id="lv-piutang" style="display:none;">
     <div class="pills">
@@ -460,6 +477,59 @@ tr:last-child td{border-bottom:none;}
     </div>
     <div class="fg"><label class="fl">Tanggal Lunas</label><input type="date" class="fc" id="ln-tgl"></div>
     <button class="btn btn-primary btn-full" onclick="simpanLunas()">✅ Tandai Lunas</button>
+  </div>
+</div>
+
+<!-- MODAL DETAIL TRANSAKSI -->
+<div class="mo" id="mo-detail">
+  <div class="mo-box">
+    <div class="mo-hdr">
+      <div class="mo-title" id="detail-title">Detail Transaksi</div>
+      <button class="mo-close" onclick="closeModal('mo-detail')">✕</button>
+    </div>
+    <div id="detail-body"></div>
+    <div id="detail-actions" style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap;"></div>
+  </div>
+</div>
+
+<!-- MODAL EDIT TRANSAKSI -->
+<div class="mo" id="mo-edit">
+  <div class="mo-box">
+    <div class="mo-hdr">
+      <div class="mo-title">✏️ Edit Transaksi</div>
+      <button class="mo-close" onclick="closeModal('mo-edit')">✕</button>
+    </div>
+    <div class="fg">
+      <label class="fl">Tanggal</label>
+      <input type="date" class="fc" id="edit-tgl">
+    </div>
+    <div class="fg">
+      <label class="fl">Pembeli / Pihak</label>
+      <input type="text" class="fc" id="edit-pembeli" placeholder="Nama pembeli">
+    </div>
+    <div class="fg">
+      <label class="fl">Produk & Jumlah</label>
+      <div id="edit-items"></div>
+      <button onclick="addRow('edit-items','edit')" class="btn btn-sm btn-outline mt8">+ Produk</button>
+    </div>
+    <div class="fg" id="edit-pay-wrap">
+      <label class="fl">Metode Pembayaran</label>
+      <div class="pay-group" id="edit-pay-group">
+        <button class="pay-pill active" data-pay="tunai" onclick="selectPay(this,'edit-pay-group')">💵 Tunai</button>
+        <button class="pay-pill" data-pay="qris" onclick="selectPay(this,'edit-pay-group')">📱 QRIS</button>
+        <button class="pay-pill hutang" data-pay="hutang" onclick="selectPay(this,'edit-pay-group')">📒 Hutang</button>
+        <button class="pay-pill" data-pay="others" onclick="selectPay(this,'edit-pay-group')">💳 Lainnya</button>
+      </div>
+    </div>
+    <div class="fg">
+      <label class="fl">Catatan</label>
+      <input type="text" class="fc" id="edit-catatan" placeholder="Opsional">
+    </div>
+    <div class="sum-box">
+      <div class="sum-row"><span class="muted">Total</span><span id="edit-total-display">Rp 0</span></div>
+    </div>
+    <button class="btn btn-primary btn-full" onclick="simpanEdit()">💾 Simpan Perubahan</button>
+    <button class="btn btn-red btn-full" style="margin-top:6px;" onclick="hapusTx()">🗑️ Hapus Transaksi</button>
   </div>
 </div>
 
@@ -950,8 +1020,174 @@ function txRow(tx){
   const isPlus=tx.tipe==='penjualan'||tx.tipe==='rekonsiliasi'||tx.tipe==='pelunasan';
   const totalQty=tx.items?.reduce((s,i)=>s+(i.qty||i.terjual||0),0)||0;
   const payBadge=tx.metodeBayar&&tx.metodeBayar!=='tunai'?` · <span class="badge ${tx.metodeBayar==='hutang'?'bg-red':'bg-blue'}">${PAY_LABEL[tx.metodeBayar]||tx.metodeBayar}</span>`:'';
-  return `<div class="tx-item"><div class="tx-dot ${dots[tx.tipe]||'td-jual'}">${icons[tx.tipe]||'📝'}</div><div class="tx-body"><div class="tx-name">${labels[tx.tipe]} · ${pihak}${payBadge}</div><div class="tx-meta">${fmtD(tx.tanggal)}${totalQty?' · '+totalQty+' pcs':''}</div></div><div class="tx-amt ${isPlus?'plus':tx.tipe==='konsinyasi'?'neutral':'minus'}">${isPlus?'+':''}${tx.total?fmt(Math.abs(tx.total)):'—'}</div></div>`;
+  return `<div class="tx-item" onclick="openDetailTx('${tx.id}')"><div class="tx-dot ${dots[tx.tipe]||'td-jual'}">${icons[tx.tipe]||'📝'}</div><div class="tx-body"><div class="tx-name">${labels[tx.tipe]} · ${pihak}${payBadge}</div><div class="tx-meta">${fmtD(tx.tanggal)}${totalQty?' · '+totalQty+' pcs':''}</div></div><div class="tx-amt ${isPlus?'plus':tx.tipe==='konsinyasi'?'neutral':'minus'}">${isPlus?'+':''}${tx.total?fmt(Math.abs(tx.total)):'—'}</div></div>`;
 }
+
+// ======================== DETAIL & EDIT TX
+let currentEditId = null;
+
+window.openDetailTx = function(txId){
+  const tx = STATE.tx[txId]; if(!tx) return;
+  const icons={penjualan:'🛒',pembelian:'📥',retur:'↩️',konsinyasi:'🏪',rekonsiliasi:'✅',pelunasan:'💳'};
+  const labels={penjualan:'Penjualan',pembelian:'Pembelian',retur:'Retur',konsinyasi:'Konsinyasi',rekonsiliasi:'Rekonsiliasi',pelunasan:'Pelunasan'};
+  const isPlus=tx.tipe==='penjualan'||tx.tipe==='rekonsiliasi'||tx.tipe==='pelunasan';
+
+  document.getElementById('detail-title').textContent = (icons[tx.tipe]||'📝')+' '+( labels[tx.tipe]||tx.tipe);
+
+  // Products
+  let prodHTML = '';
+  if(tx.items && tx.items.length){
+    prodHTML = '<div style="margin-bottom:10px;">';
+    tx.items.forEach(i=>{
+      const qty = i.qty||i.terjual||0;
+      const sub = i.harga ? `${qty} pcs × ${fmt(i.harga)} = ${fmt(qty*i.harga)}` : `${qty} pcs`;
+      prodHTML += `<div class="detail-product"><div class="detail-product-name">${i.nama||i.prodId}</div><div class="detail-product-sub">${sub}</div></div>`;
+    });
+    prodHTML += '</div>';
+  }
+
+  // Info rows
+  const pihak = tx.pembeli||tx.supplier||tx.toko||'-';
+  const pihakLabel = tx.tipe==='pembelian'||tx.tipe==='retur' ? 'Supplier' : 'Pembeli/Toko';
+  const rows = [
+    ['Tanggal', fmtD(tx.tanggal)],
+    [pihakLabel, pihak],
+    tx.kontak ? ['Kontak', tx.kontak] : null,
+    tx.metodeBayar ? ['Metode Bayar', `<span class="badge ${tx.metodeBayar==='hutang'?'bg-red':'bg-blue'}">${PAY_LABEL[tx.metodeBayar]||tx.metodeBayar}</span>`] : null,
+    tx.catatan ? ['Catatan', tx.catatan] : null,
+    tx.supplier ? ['Supplier', tx.supplier] : null,
+  ].filter(Boolean);
+
+  const totalAmt = tx.totalAsli || tx.total || 0;
+  const totalColor = isPlus ? 'var(--g3)' : tx.tipe==='konsinyasi'?'var(--muted)':'var(--red)';
+
+  document.getElementById('detail-body').innerHTML = `
+    ${prodHTML}
+    <div class="card" style="padding:8px 12px;box-shadow:none;border:1.5px solid var(--border);">
+      ${rows.map(([l,v])=>`<div class="detail-row"><span class="detail-label">${l}</span><span class="detail-val">${v}</span></div>`).join('')}
+      <div class="detail-row"><span class="detail-label" style="font-weight:700;">Total</span><span class="detail-val" style="font-size:16px;font-weight:800;color:${totalColor};">${isPlus?'+':''}${fmt(Math.abs(totalAmt))}</span></div>
+    </div>
+    <div style="font-size:10px;color:var(--muted);margin-top:6px;text-align:right;">ID: ${tx.id} · ${new Date(tx.createdAt).toLocaleString('id-ID')}</div>
+  `;
+
+  // Actions
+  const canEdit = tx.tipe==='penjualan'||tx.tipe==='pembelian'||tx.tipe==='retur';
+  document.getElementById('detail-actions').innerHTML = canEdit
+    ? `<button class="btn btn-outline" onclick="closeModal('mo-detail');openEditTx('${tx.id}')">✏️ Edit</button>`
+    : `<div style="font-size:11px;color:var(--muted);">Transaksi ini tidak bisa diedit langsung</div>`;
+
+  openModal('mo-detail');
+};
+
+window.openEditTx = function(txId){
+  currentEditId = txId;
+  const tx = STATE.tx[txId]; if(!tx) return;
+  document.getElementById('edit-tgl').value = tx.tanggal||today();
+  document.getElementById('edit-pembeli').value = tx.pembeli||tx.supplier||'';
+  document.getElementById('edit-catatan').value = tx.catatan||'';
+
+  // Populate items
+  const c = document.getElementById('edit-items');
+  c.innerHTML = '';
+  if(tx.items){
+    tx.items.forEach(item=>{
+      const div=document.createElement('div'); div.className='item-row';
+      div.innerHTML=`<select class="fc" onchange="calcEdit()">${prodOpts()}</select><input type="number" class="fc" placeholder="Qty" min="1" value="${item.qty||1}" oninput="calcEdit()"><button class="del-btn" onclick="this.closest('.item-row').remove();calcEdit()">✕</button>`;
+      c.appendChild(div);
+      div.querySelector('select').value = item.prodId;
+    });
+  }
+
+  // Metode bayar
+  const showPay = tx.tipe==='penjualan';
+  document.getElementById('edit-pay-wrap').style.display = showPay?'block':'none';
+  if(showPay && tx.metodeBayar){
+    document.querySelectorAll('#edit-pay-group .pay-pill').forEach(p=>p.classList.remove('active'));
+    const pp=document.querySelector(`#edit-pay-group .pay-pill[data-pay="${tx.metodeBayar}"]`);
+    if(pp) pp.classList.add('active');
+  }
+
+  calcEdit();
+  openModal('mo-edit');
+};
+
+function calcEdit(){
+  let total=0;
+  document.querySelectorAll('#edit-items .item-row').forEach(row=>{
+    const qty=parseInt(row.querySelector('input').value)||0;
+    const price=parseInt(row.querySelector('select').selectedOptions[0]?.dataset?.price||0);
+    total+=price*qty;
+  });
+  document.getElementById('edit-total-display').textContent=fmt(total);
+}
+window.calcEdit=calcEdit;
+
+async function simpanEdit(){
+  const tx = STATE.tx[currentEditId]; if(!tx) return;
+  const tgl = document.getElementById('edit-tgl').value;
+  const pembeli = document.getElementById('edit-pembeli').value.trim();
+  const catatan = document.getElementById('edit-catatan').value.trim();
+  const metodeBayar = tx.tipe==='penjualan' ? getActivePay('edit-pay-group') : tx.metodeBayar;
+
+  const items=[];
+  document.querySelectorAll('#edit-items .item-row').forEach(row=>{
+    const pid=row.querySelector('select').value;
+    const qty=parseInt(row.querySelector('input').value)||0;
+    if(!pid||qty<1) return;
+    const p=PRODS.find(x=>x.id===pid);
+    items.push({prodId:pid,qty,harga:p.price,nama:p.name});
+  });
+  if(!items.length){alert('Produk tidak boleh kosong!');return;}
+
+  const totalBaru=items.reduce((s,i)=>s+i.qty*i.harga,0);
+  const isHutang = metodeBayar==='hutang';
+
+  setSyncStatus('syncing');
+  try{
+    // Kembalikan stok lama, kurangi stok baru
+    const stokUpdate={};
+    // Revert stok lama
+    tx.items?.forEach(i=>{ stokUpdate[i.prodId]=(stokUpdate[i.prodId]||STATE.stok[i.prodId]||0)+i.qty; });
+    // Kurangi stok baru
+    for(const i of items){
+      stokUpdate[i.prodId]=(stokUpdate[i.prodId]??STATE.stok[i.prodId]||0)-i.qty;
+      if(stokUpdate[i.prodId]<0){alert(`Stok ${i.nama} tidak cukup!`);setSyncStatus('');return;}
+    }
+
+    const updatedTx={...tx, tanggal:tgl, items, total:isHutang?0:totalBaru, totalAsli:totalBaru, metodeBayar, catatan,
+      ...(tx.tipe==='penjualan'?{pembeli}:{}),
+      ...(tx.tipe==='pembelian'||tx.tipe==='retur'?{supplier:pembeli}:{})
+    };
+
+    const writes=[set(ref(db,`tx/${currentEditId}`),updatedTx)];
+    Object.entries(stokUpdate).forEach(([pid,qty])=>writes.push(set(ref(db,`stok/${pid}`),qty)));
+    await Promise.all(writes);
+    setSyncStatus('');
+    closeModal('mo-edit');
+    alert('✅ Transaksi berhasil diupdate!');
+  }catch(e){setSyncStatus('offline');alert('Gagal: '+e.message);}
+}
+window.simpanEdit=simpanEdit;
+
+async function hapusTx(){
+  if(!confirm('Hapus transaksi ini? Stok akan dikembalikan.')) return;
+  const tx=STATE.tx[currentEditId]; if(!tx) return;
+  setSyncStatus('syncing');
+  try{
+    const writes=[remove(ref(db,`tx/${currentEditId}`))];
+    // Kembalikan stok
+    tx.items?.forEach(i=>{
+      const isKeluar=tx.tipe==='penjualan'||tx.tipe==='konsinyasi';
+      const delta=isKeluar?i.qty:-i.qty;
+      writes.push(set(ref(db,`stok/${i.prodId}`),(STATE.stok[i.prodId]||0)+delta));
+    });
+    await Promise.all(writes);
+    setSyncStatus('');
+    closeModal('mo-edit');
+    alert('🗑️ Transaksi dihapus.');
+  }catch(e){setSyncStatus('offline');alert('Gagal: '+e.message);}
+}
+window.hapusTx=hapusTx;
 
 // ======================== RENDER STOK
 function renderGudang(){
