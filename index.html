@@ -572,6 +572,7 @@ const PRODS = [
   {id:'KL', name:'Katsu Lele',               price:35000, icon:'🍱'},
   {id:'LA', name:'Lele Asap',                price:38000, icon:'💨'},
   {id:'NB', name:'Nila Bumbu',               price:43000, icon:'🐡'},
+  {id:'TP', name:'Tahu Pananya',             price:13000, icon:'🟨', preorder:true},
 ];
 
 let STATE = {tx:{}, konsinyasi:{}, pembeli:{}, stok:{}, stokKon:{}, booking:{}, piutang:{}};
@@ -582,7 +583,7 @@ const genId = () => Date.now().toString(36)+Math.random().toString(36).substr(2,
 const fmt   = n => 'Rp '+Math.round(n).toLocaleString('id-ID');
 const fmtD  = d => new Date(d).toLocaleDateString('id-ID',{day:'numeric',month:'short',year:'numeric'});
 const today = () => new Date().toISOString().substr(0,10);
-const prodOpts = () => `<option value="">— Produk —</option>`+PRODS.map(p=>`<option value="${p.id}" data-price="${p.price}">${p.icon} ${p.name} (${fmt(p.price)})</option>`).join('');
+const prodOpts = () => `<option value="">— Produk —</option>`+PRODS.map(p=>`<option value="${p.id}" data-price="${p.price}">${p.icon} ${p.name}${p.preorder?' [PO]':''} (${fmt(p.price)})</option>`).join('');
 
 const PAY_LABEL = {tunai:'💵 Tunai', qris:'📱 QRIS', hutang:'📒 Hutang', transfer:'🏦 Transfer', others:'💳 Lainnya'};
 
@@ -774,7 +775,8 @@ async function simpanBooking(){
   if(!items||!items.length){alert('Lengkapi produk!');return;}
 
   for(const i of items){
-    if((STATE.stok[i.prodId]||0)<i.qty){
+    const prod = PRODS.find(x=>x.id===i.prodId);
+    if(!prod.preorder && (STATE.stok[i.prodId]||0)<i.qty){
       alert(`Stok ${i.nama} kurang!\nAda: ${STATE.stok[i.prodId]||0}, Minta: ${i.qty}`); return;
     }
   }
@@ -784,14 +786,18 @@ async function simpanBooking(){
     const id=genId();
     const bk={id,pembeli,kontak,tanggal:tgl,tanggalAmbil:tglAmbil||'',catatan,items,total,status:'pending',createdAt:new Date().toISOString()};
     const writes=[set(ref(db,`booking/${id}`),bk)];
-    // Stok langsung berkurang
-    items.forEach(i=>writes.push(set(ref(db,`stok/${i.prodId}`),(STATE.stok[i.prodId]||0)-i.qty)));
+    // Stok berkurang kecuali produk preorder
+    items.forEach(i=>{
+      const prod=PRODS.find(x=>x.id===i.prodId);
+      if(!prod.preorder) writes.push(set(ref(db,`stok/${i.prodId}`),(STATE.stok[i.prodId]||0)-i.qty));
+    });
+    const hasPreorder=items.some(i=>PRODS.find(x=>x.id===i.prodId)&&PRODS.find(x=>x.id===i.prodId).preorder);
     if(kontak&&!getPbArray().find(p=>p.nama.toLowerCase()===pembeli.toLowerCase())){
       const pbId=genId(); writes.push(set(ref(db,`pembeli/${pbId}`),{id:pbId,nama:pembeli,hp:kontak,alamat:'',tipe:'retail'}));
     }
     await Promise.all(writes);
     setSyncStatus(''); closeModal('mo-booking');
-    alert(`✅ Booking dicatat!\n${pembeli} — ${fmt(total)}\nStok sudah dikurangi`);
+    alert(`✅ Booking dicatat!\n${pembeli} — ${fmt(total)}${hasPreorder?'\n📋 Tahu Pananya: pre-order, stok belum dikurangi':''}`);
   }catch(e){setSyncStatus('offline');alert('Gagal: '+e.message);}
 }
 window.simpanBooking=simpanBooking;
@@ -842,8 +848,11 @@ window.batalBooking = async function(bookingId){
   setSyncStatus('syncing');
   try{
     const writes=[update(ref(db,`booking/${bookingId}`),{status:'batal',tanggalBatal:today()})];
-    // Kembalikan stok
-    bk.items.forEach(i=>writes.push(set(ref(db,`stok/${i.prodId}`),(STATE.stok[i.prodId]||0)+i.qty)));
+    // Kembalikan stok hanya untuk produk non-preorder
+    bk.items.forEach(i=>{
+      const prod=PRODS.find(x=>x.id===i.prodId);
+      if(!prod || !prod.preorder) writes.push(set(ref(db,`stok/${i.prodId}`),(STATE.stok[i.prodId]||0)+i.qty));
+    });
     await Promise.all(writes);
     setSyncStatus(''); alert('✅ Booking dibatalkan, stok dikembalikan.');
   }catch(e){setSyncStatus('offline');alert('Gagal: '+e.message);}
