@@ -591,11 +591,11 @@ function setSyncStatus(s) {
   document.getElementById('sync-status').textContent = s===''?'Terhubung':s==='syncing'?'Menyimpan...':'Offline';
 }
 
-function getTxArray()      { return Object.values(STATE.tx).sort((a,b)=>new Date(b.createdAt)-new Date(a.createdAt)); }
-function getKonArray()     { return Object.values(STATE.konsinyasi||{}); }
-function getPbArray()      { return Object.values(STATE.pembeli||{}); }
-function getBookingArray() { return Object.values(STATE.booking||{}).sort((a,b)=>new Date(b.createdAt)-new Date(a.createdAt)); }
-function getPiutangArray() { return Object.values(STATE.piutang||{}).sort((a,b)=>new Date(b.createdAt)-new Date(a.createdAt)); }
+function getTxArray()      { return Object.entries(STATE.tx).map(([k,v])=>({...v,_key:k,id:v.id||k})).sort((a,b)=>new Date(b.createdAt)-new Date(a.createdAt)); }
+function getKonArray()     { return Object.entries(STATE.konsinyasi||{}).map(([k,v])=>({...v,_key:k,id:v.id||k})); }
+function getPbArray()      { return Object.entries(STATE.pembeli||{}).map(([k,v])=>({...v,_key:k,id:v.id||k})); }
+function getBookingArray() { return Object.entries(STATE.booking||{}).map(([k,v])=>({...v,_key:k,id:v.id||k})).sort((a,b)=>new Date(b.createdAt)-new Date(a.createdAt)); }
+function getPiutangArray() { return Object.entries(STATE.piutang||{}).map(([k,v])=>({...v,_key:k,id:v.id||k})).sort((a,b)=>new Date(b.createdAt)-new Date(a.createdAt)); }
 
 // ======================== NAV
 let currentPage='page-beranda';
@@ -1011,16 +1011,22 @@ function txRow(tx){
   const labels={penjualan:'Jual',pembelian:'Beli',retur:'Retur',konsinyasi:'Konsinyasi',rekonsiliasi:'Rekon',pelunasan:'Pelunasan'};
   const pihak=tx.pembeli||tx.supplier||tx.toko||'-';
   const isPlus=tx.tipe==='penjualan'||tx.tipe==='rekonsiliasi'||tx.tipe==='pelunasan';
-  const totalQty=tx.items?.reduce((s,i)=>s+(i.qty||i.terjual||0),0)||0;
+  const totalQty=tx.items?tx.items.reduce((s,i)=>s+(i.qty||i.terjual||0),0):0;
   const payBadge=tx.metodeBayar&&tx.metodeBayar!=='tunai'?` · <span class="badge ${tx.metodeBayar==='hutang'?'bg-red':'bg-blue'}">${PAY_LABEL[tx.metodeBayar]||tx.metodeBayar}</span>`:'';
-  return `<div class="tx-item" onclick="openDetailTx('${tx.id}')"><div class="tx-dot ${dots[tx.tipe]||'td-jual'}">${icons[tx.tipe]||'📝'}</div><div class="tx-body"><div class="tx-name">${labels[tx.tipe]} · ${pihak}${payBadge}</div><div class="tx-meta">${fmtD(tx.tanggal)}${totalQty?' · '+totalQty+' pcs':''}</div></div><div class="tx-amt ${isPlus?'plus':tx.tipe==='konsinyasi'?'neutral':'minus'}">${isPlus?'+':''}${tx.total?fmt(Math.abs(tx.total)):'—'}</div></div>`;
+  const txId=tx.id||tx._key||'';
+  return `<div class="tx-item" onclick="openDetailTx('${txId}')"><div class="tx-dot ${dots[tx.tipe]||'td-jual'}">${icons[tx.tipe]||'📝'}</div><div class="tx-body"><div class="tx-name">${labels[tx.tipe]} · ${pihak}${payBadge}</div><div class="tx-meta">${fmtD(tx.tanggal)}${totalQty?' · '+totalQty+' pcs':''}</div></div><div class="tx-amt ${isPlus?'plus':tx.tipe==='konsinyasi'?'neutral':'minus'}">${isPlus?'+':''}${tx.total?fmt(Math.abs(tx.total)):'—'}</div></div>`;
 }
 
 // ======================== DETAIL & EDIT TX
 let currentEditId = null;
 
 window.openDetailTx = function(txId){
-  const tx = STATE.tx[txId]; if(!tx) return;
+  // Cari di STATE.tx by key langsung atau by id field
+  let tx = STATE.tx[txId];
+  if(!tx) tx = Object.values(STATE.tx).find(t=>t.id===txId);
+  if(!tx){ alert('Data tidak ditemukan'); return; }
+  const firebaseKey = Object.keys(STATE.tx).find(k=>STATE.tx[k]===tx || k===txId) || txId;
+  tx = {...tx, id: tx.id||firebaseKey, _key: firebaseKey};
   const icons={penjualan:'🛒',pembelian:'📥',retur:'↩️',konsinyasi:'🏪',rekonsiliasi:'✅',pelunasan:'💳'};
   const labels={penjualan:'Penjualan',pembelian:'Pembelian',retur:'Retur',konsinyasi:'Konsinyasi',rekonsiliasi:'Rekonsiliasi',pelunasan:'Pelunasan'};
   const isPlus=tx.tipe==='penjualan'||tx.tipe==='rekonsiliasi'||tx.tipe==='pelunasan';
@@ -1074,7 +1080,9 @@ window.openDetailTx = function(txId){
 
 window.openEditTx = function(txId){
   currentEditId = txId;
-  const tx = STATE.tx[txId]; if(!tx) return;
+  let tx = STATE.tx[txId];
+  if(!tx) tx = Object.values(STATE.tx).find(t=>t.id===txId);
+  if(!tx) return;
   document.getElementById('edit-tgl').value = tx.tanggal||today();
   document.getElementById('edit-pembeli').value = tx.pembeli||tx.supplier||'';
   document.getElementById('edit-catatan').value = tx.catatan||'';
@@ -1116,7 +1124,10 @@ function calcEdit(){
 window.calcEdit=calcEdit;
 
 async function simpanEdit(){
-  const tx = STATE.tx[currentEditId]; if(!tx) return;
+  let tx = STATE.tx[currentEditId];
+  if(!tx) tx = Object.values(STATE.tx).find(t=>t.id===currentEditId);
+  if(!tx) return;
+  const firebaseKey = STATE.tx[currentEditId] ? currentEditId : Object.keys(STATE.tx).find(k=>STATE.tx[k].id===currentEditId)||currentEditId;
   const tgl = document.getElementById('edit-tgl').value;
   const pembeli = document.getElementById('edit-pembeli').value.trim();
   const catatan = document.getElementById('edit-catatan').value.trim();
@@ -1140,7 +1151,7 @@ async function simpanEdit(){
     // Kembalikan stok lama, kurangi stok baru
     const stokUpdate={};
     // Revert stok lama
-    tx.items?.forEach(i=>{ stokUpdate[i.prodId]=(stokUpdate[i.prodId]||STATE.stok[i.prodId]||0)+i.qty; });
+    if(tx.items) tx.items.forEach(i=>{ stokUpdate[i.prodId]=(stokUpdate[i.prodId]||STATE.stok[i.prodId]||0)+i.qty; });
     // Kurangi stok baru
     for(const i of items){
       stokUpdate[i.prodId]=((stokUpdate[i.prodId]!==undefined?stokUpdate[i.prodId]:STATE.stok[i.prodId])||0)-i.qty;
@@ -1152,7 +1163,7 @@ async function simpanEdit(){
       ...(tx.tipe==='pembelian'||tx.tipe==='retur'?{supplier:pembeli}:{})
     };
 
-    const writes=[set(ref(db,`tx/${currentEditId}`),updatedTx)];
+    const writes=[set(ref(db,`tx/${firebaseKey}`),updatedTx)];
     Object.entries(stokUpdate).forEach(([pid,qty])=>writes.push(set(ref(db,`stok/${pid}`),qty)));
     await Promise.all(writes);
     setSyncStatus('');
@@ -1164,12 +1175,15 @@ window.simpanEdit=simpanEdit;
 
 async function hapusTx(){
   if(!confirm('Hapus transaksi ini? Stok akan dikembalikan.')) return;
-  const tx=STATE.tx[currentEditId]; if(!tx) return;
+  let tx=STATE.tx[currentEditId];
+  if(!tx) tx=Object.values(STATE.tx).find(t=>t.id===currentEditId);
+  if(!tx) return;
+  const firebaseKey2 = STATE.tx[currentEditId] ? currentEditId : Object.keys(STATE.tx).find(k=>STATE.tx[k].id===currentEditId)||currentEditId;
   setSyncStatus('syncing');
   try{
-    const writes=[remove(ref(db,`tx/${currentEditId}`))];
+    const writes=[remove(ref(db,`tx/${firebaseKey2}`))];
     // Kembalikan stok
-    tx.items?.forEach(i=>{
+    if(tx.items) tx.items.forEach(i=>{
       const isKeluar=tx.tipe==='penjualan'||tx.tipe==='konsinyasi';
       const delta=isKeluar?i.qty:-i.qty;
       writes.push(set(ref(db,`stok/${i.prodId}`),(STATE.stok[i.prodId]||0)+delta));
@@ -1300,7 +1314,7 @@ function renderPiutang(){
         <div><div class="hutang-name">👤 ${p.pembeli}${p.kontak?` · <span style="font-size:11px;color:var(--muted)">${p.kontak}</span>`:''}</div></div>
         <div class="hutang-amt">${p.status==='lunas'?'✅ ':''} ${fmt(p.total)}</div>
       </div>
-      <div class="hutang-meta">Transaksi: ${fmtD(p.tanggal)} · ${p.items?.map(i=>`${i.nama} ×${i.qty}`).join(', ')||''}${p.status==='lunas'&&p.tanggalLunas?` · Lunas: ${fmtD(p.tanggalLunas)} via ${PAY_LABEL[p.metodeBayarLunas]||p.metodeBayarLunas}`:''}</div>
+      <div class="hutang-meta">Transaksi: ${fmtD(p.tanggal)} · ${(p.items?p.items.map(i=>`${i.nama} ×${i.qty}`).join(', '):'')}${p.status==='lunas'&&p.tanggalLunas?` · Lunas: ${fmtD(p.tanggalLunas)} via ${PAY_LABEL[p.metodeBayarLunas]||p.metodeBayarLunas}`:''}</div>
       ${p.status==='belum'?`<button class="btn btn-primary btn-sm" onclick="openLunas('${p.id}')">💳 Tandai Lunas</button>`:`<span class="badge bg-green">✅ Lunas via ${PAY_LABEL[p.metodeBayarLunas]||p.metodeBayarLunas}</span>`}
     </div>`).join('');
 }
@@ -1318,7 +1332,7 @@ function renderHarian(){
 function renderPerProduk(){
   const bp={};
   getTxArray().filter(t=>t.tipe==='penjualan'||t.tipe==='rekonsiliasi').forEach(t=>{
-    t.items?.forEach(i=>{if(!bp[i.prodId])bp[i.prodId]={qty:0,total:0,nama:i.nama};const q=i.qty||i.terjual||0;bp[i.prodId].qty+=q;bp[i.prodId].total+=q*(i.harga||0);});
+    if(t.items) t.items.forEach(i=>{if(!bp[i.prodId])bp[i.prodId]={qty:0,total:0,nama:i.nama};const q=i.qty||i.terjual||0;bp[i.prodId].qty+=q;bp[i.prodId].total+=q*(i.harga||0);});
   });
   const sorted=Object.entries(bp).sort((a,b)=>b[1].total-a[1].total);
   const c=document.getElementById('list-produk');
