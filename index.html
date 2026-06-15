@@ -591,13 +591,6 @@ function setSyncStatus(s) {
   document.getElementById('sync-status').textContent = s===''?'Terhubung':s==='syncing'?'Menyimpan...':'Offline';
 }
 
-// ======================== FIREBASE LISTENERS
-function startListeners() {
-  ['stok','stokKon','tx','konsinyasi','pembeli','booking','piutang'].forEach(key=>{
-    onValue(ref(db,key), snap=>{ STATE[key]=snap.val()||{}; renderCurrentPage(); });
-  });
-}
-
 function getTxArray()      { return Object.values(STATE.tx).sort((a,b)=>new Date(b.createdAt)-new Date(a.createdAt)); }
 function getKonArray()     { return Object.values(STATE.konsinyasi||{}); }
 function getPbArray()      { return Object.values(STATE.pembeli||{}); }
@@ -1349,8 +1342,32 @@ function renderPembeli(){
 
 // ======================== INIT
 document.getElementById('topbarDate').innerHTML=new Date().toLocaleDateString('id-ID',{weekday:'short',day:'numeric',month:'short'});
-startListeners();
-setTimeout(()=>{document.getElementById('loading-screen').style.display='none';renderBeranda();},2000);
+
+let appReady=false;
+function hideLoading(){
+  if(appReady) return;
+  appReady=true;
+  document.getElementById('loading-screen').style.display='none';
+  renderBeranda();
+}
+
+// Sembunyikan loading saat data pertama masuk
+onValue(ref(db,'stok'), snap=>{
+  STATE.stok=snap.val()||{};
+  hideLoading();
+  renderCurrentPage();
+},{onlyOnce:false});
+
+onValue(ref(db,'stokKon'),  snap=>{STATE.stokKon=snap.val()||{};renderCurrentPage();});
+onValue(ref(db,'tx'),       snap=>{STATE.tx=snap.val()||{};renderCurrentPage();});
+onValue(ref(db,'konsinyasi'),snap=>{STATE.konsinyasi=snap.val()||{};renderCurrentPage();});
+onValue(ref(db,'pembeli'),  snap=>{STATE.pembeli=snap.val()||{};renderCurrentPage();});
+onValue(ref(db,'booking'),  snap=>{STATE.booking=snap.val()||{};renderCurrentPage();});
+onValue(ref(db,'piutang'),  snap=>{STATE.piutang=snap.val()||{};renderCurrentPage();});
+
+// Fallback: kalau 4 detik belum konek juga, tampilkan app apa adanya
+setTimeout(hideLoading, 4000);
+
 if('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(()=>{});
 </script>
 </body>
