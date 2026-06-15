@@ -1364,7 +1364,14 @@ function renderPembeli(){
 }
 
 // ======================== INIT
-document.getElementById('topbarDate').innerHTML=new Date().toLocaleDateString('id-ID',{weekday:'short',day:'numeric',month:'short'});
+function updateClock(){
+  const now = new Date();
+  const tgl = now.toLocaleDateString('id-ID',{day:'numeric',month:'long',year:'numeric'});
+  const jam = now.toLocaleTimeString('id-ID',{hour:'2-digit',minute:'2-digit'});
+  document.getElementById('topbarDate').innerHTML = tgl+' '+jam+' WIB';
+}
+updateClock();
+setInterval(updateClock, 1000);
 
 let appReady=false;
 function hideLoading(){
