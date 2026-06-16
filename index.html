@@ -1675,26 +1675,41 @@ function renderPerProduk(){
 // ======================== PEMBELI
 function renderPembeli(){
   const c=document.getElementById('list-pembeli');
-  const pb=getPbArray();
+  let pb=getPbArray();
   if(!pb.length){c.innerHTML=`<div class="empty"><div class="empty-icon">👥</div><div class="empty-txt">Belum ada data pembeli</div></div>`;return;}
+
+  // Deduplikasi — kalau ada nama sama (case-insensitive), pakai yang pertama
+  const seen = new Map();
+  pb.forEach(p=>{
+    const key = (p.nama||'').toLowerCase().trim();
+    if(key && !seen.has(key)) seen.set(key, p);
+  });
+  pb = Array.from(seen.values()).sort((a,b)=>a.nama.localeCompare(b.nama,'id'));
+
   const ti={retail:'🛒',konsinyasi:'🏪',reseller:'📦'};
   const tl={retail:'Retail',konsinyasi:'Konsinyasi',reseller:'Reseller'};
-  c.innerHTML=`<div class="card" style="padding:4px 12px;">`+pb.map(p=>{
-    const tot=getTxArray().filter(t=>t.pembeli===p.nama&&(t.tipe==='penjualan'||t.tipe==='rekonsiliasi'||t.tipe==='pelunasan')&&t.total>0).reduce((s,t)=>s+(t.total||0),0);
-    const hutang=getPiutangArray().filter(h=>h.pembeli===p.nama&&h.status==='belum').reduce((s,h)=>s+h.total,0);
-    const pbKey = Object.keys(STATE.pembeli).find(k=>STATE.pembeli[k].id===p.id||k===p.id)||p.id;
-    return `<div class="sk-item">
-      <div class="sk-icon">${ti[p.tipe]||'👤'}</div>
-      <div style="flex:1">
-        <div class="sk-name">${p.nama} <span class="badge bg-gray">${tl[p.tipe]||p.tipe}</span>${hutang>0?` <span class="badge bg-red">Hutang ${fmt(hutang)}</span>`:''}</div>
-        <div class="sk-price">${p.hp||'—'}${p.alamat?' · '+p.alamat:''}</div>
-      </div>
-      <div style="display:flex;align-items:center;gap:8px;">
-        <div style="text-align:right;"><div style="font-weight:800;font-size:12px;color:var(--g2)">${fmt(tot)}</div></div>
-        <button class="btn btn-sm btn-outline" onclick="openEditPb('${pbKey}')" style="padding:5px 8px;">✏️</button>
-      </div>
-    </div>`;
-  }).join('')+`</div>`;
+
+  c.innerHTML=`
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+      <div style="font-size:11px;color:var(--muted);">${pb.length} pembeli · urut A–Z</div>
+    </div>
+    <div class="card" style="padding:4px 12px;">` +
+    pb.map(p=>{
+      const txList = getTxArray().filter(t=>t.pembeli&&t.pembeli.toLowerCase().trim()===p.nama.toLowerCase().trim()&&(t.tipe==='penjualan'||t.tipe==='rekonsiliasi'||t.tipe==='pelunasan')&&t.total>0);
+      const tot = txList.reduce((s,t)=>s+(t.total||0),0);
+      const txCount = txList.length;
+      const hutang = getPiutangArray().filter(h=>h.pembeli&&h.pembeli.toLowerCase().trim()===p.nama.toLowerCase().trim()&&h.status==='belum').reduce((s,h)=>s+h.total,0);
+      const pbKey = Object.keys(STATE.pembeli).find(k=>STATE.pembeli[k].id===p.id||k===p.id)||p.id;
+      return `<div class="sk-item">
+        <div class="sk-icon">${ti[p.tipe]||'👤'}</div>
+        <div style="flex:1;min-width:0;">
+          <div class="sk-name">${p.nama} <span class="badge bg-gray">${tl[p.tipe]||p.tipe}</span>${hutang>0?` <span class="badge bg-red">Hutang ${fmt(hutang)}</span>`:''}</div>
+          <div class="sk-price">${p.hp||'—'}${p.alamat?' · '+p.alamat:''}</div>
+          <div style="font-size:10px;color:var(--muted);margin-top:2px;">${txCount} transaksi · total ${fmt(tot)}</div>
+        </div>
+        <button class="btn btn-sm btn-outline" onclick="openEditPb('${pbKey}')" style="padding:5px 8px;flex-shrink:0;">✏️</button>
+      </div>`;
+    }).join('') + `</div>`;
 }
 
 // ======================== STRUK & INVOICE
@@ -1975,40 +1990,54 @@ function hideLoading(){
 }
 
 // Auto-sync semua nama pembeli dari transaksi ke node pembeli
+let syncDone = false;
 async function syncPembeliFromTx(){
-  const txArr = getTxArray();
-  const bkArr = getBookingArray();
-  const existing = new Set(Object.values(STATE.pembeli).map(p=>p.nama.toLowerCase()));
-  const writes = [];
-  const seen = new Set();
+  if(syncDone) return;
+  // Tunggu sampai tx dan pembeli sudah loaded
+  if(!Object.keys(STATE.tx).length && !Object.keys(STATE.pembeli).length) return;
+  syncDone = true;
 
-  // Dari transaksi
-  txArr.forEach(tx=>{
-    if(tx.pembeli && tx.pembeli!=='Umum'){
-      const key = tx.pembeli.toLowerCase();
-      if(!existing.has(key) && !seen.has(key)){
-        seen.add(key);
-        const id = genId();
-        writes.push(set(ref(db,`pembeli/${id}`),{
-          id, nama:tx.pembeli, hp:tx.kontak||'', alamat:'', tipe:'retail'
-        }));
-      }
-    }
-  });
-  // Dari booking
-  bkArr.forEach(bk=>{
-    if(bk.pembeli){
-      const key = bk.pembeli.toLowerCase();
-      if(!existing.has(key) && !seen.has(key)){
-        seen.add(key);
-        const id = genId();
-        writes.push(set(ref(db,`pembeli/${id}`),{
-          id, nama:bk.pembeli, hp:bk.kontak||'', alamat:'', tipe:'retail'
-        }));
-      }
-    }
-  });
+  const existing = new Set(Object.values(STATE.pembeli).map(p=>(p.nama||'').toLowerCase().trim()));
+  const writes = [];
+  const seen = new Set(existing);
+
+  const addIfNew = (nama, kontak) => {
+    if(!nama || nama==='Umum') return;
+    const key = nama.toLowerCase().trim();
+    if(seen.has(key)) return;
+    seen.add(key);
+    const id = genId();
+    writes.push(set(ref(db,`pembeli/${id}`),{id, nama:nama.trim(), hp:kontak||'', alamat:'', tipe:'retail'}));
+  };
+
+  getTxArray().forEach(tx=>{ if(tx.pembeli) addIfNew(tx.pembeli, tx.kontak); });
+  getBookingArray().forEach(bk=>{ if(bk.pembeli) addIfNew(bk.pembeli, bk.kontak); });
+
   if(writes.length) await Promise.all(writes).catch(()=>{});
+}
+
+// Hapus duplikat pembeli di Firebase — jalankan sekali
+let cleanupDone = false;
+async function cleanupDuplicatePembeli(){
+  if(cleanupDone) return;
+  const pb = Object.entries(STATE.pembeli);
+  if(pb.length < 2) return;
+  cleanupDone = true;
+
+  const seen = new Map(); // nama.lower -> key pertama
+  const toDelete = [];
+  pb.forEach(([key, p])=>{
+    const nama = (p.nama||'').toLowerCase().trim();
+    if(!nama){ toDelete.push(key); return; }
+    if(seen.has(nama)){
+      toDelete.push(key); // hapus duplikat
+    } else {
+      seen.set(nama, key);
+    }
+  });
+  if(toDelete.length){
+    await Promise.all(toDelete.map(key=>remove(ref(db,`pembeli/${key}`)))).catch(()=>{});
+  }
 }
 
 // Sembunyikan loading saat data pertama masuk
@@ -2034,8 +2063,10 @@ onValue(ref(db,'tx'), snap=>{
 onValue(ref(db,'pembeli'), snap=>{
   STATE.pembeli=snap.val()||{};
   renderCurrentPage();
-  // Sync pembeli dari tx setelah keduanya loaded
-  if(Object.keys(STATE.tx).length>0) syncPembeliFromTx();
+  if(Object.keys(STATE.tx).length>0){
+    cleanupDuplicatePembeli();
+    syncPembeliFromTx();
+  }
 });
 
 // Fallback: kalau 4 detik belum konek juga, tampilkan app apa adanya
