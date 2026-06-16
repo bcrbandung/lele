@@ -208,6 +208,13 @@ tr:last-child td{border-bottom:none;}
 .detail-product-name{font-weight:600;font-size:12px;}
 .detail-product-sub{font-size:11px;color:var(--muted);margin-top:2px;}
 
+.suggest-box{position:absolute;left:0;right:0;background:white;border:1.5px solid var(--g4);border-radius:0 0 8px 8px;z-index:300;max-height:200px;overflow-y:auto;box-shadow:0 4px 12px rgba(0,0,0,0.12);}
+.suggest-item{padding:10px 12px;font-size:13px;cursor:pointer;border-bottom:1px solid #f0f5f2;}
+.suggest-item:last-child{border-bottom:none;}
+.suggest-item:active{background:var(--gpale);}
+.suggest-name{font-weight:600;}
+.suggest-hp{font-size:11px;color:var(--muted);}
+
 #loading-screen{position:fixed;inset:0;background:var(--g2);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:999;color:white;gap:16px;}
 #loading-screen .ls-icon{font-size:48px;}
 #loading-screen .ls-text{font-size:14px;opacity:0.8;}
@@ -354,7 +361,12 @@ tr:last-child td{border-bottom:none;}
       <div class="fg" style="margin-bottom:0"><label class="fl">Tanggal</label><input type="date" class="fc" id="j-tgl"></div>
       <div class="fg" style="margin-bottom:0"><label class="fl">Kontak</label><input type="tel" class="fc" id="j-kontak" placeholder="08xx"></div>
     </div>
-    <div class="fg"><label class="fl">Pembeli</label><input list="pb-dl" class="fc" id="j-pembeli" placeholder="Nama / umum"><datalist id="pb-dl"></datalist></div>
+    <div class="fg"><label class="fl">Pembeli</label>
+      <div style="position:relative;">
+        <input type="text" class="fc" id="j-pembeli" placeholder="Ketik nama pembeli..." autocomplete="off" oninput="showSuggest(this,'j-kontak','j-suggest')">
+        <div id="j-suggest" class="suggest-box" style="display:none;"></div>
+      </div>
+    </div>
     <div class="fg"><label class="fl">Produk & Jumlah</label><div id="j-items"></div><button onclick="addRow('j-items','jual')" class="btn btn-sm btn-outline mt8">+ Produk</button></div>
     <div class="fg">
       <label class="fl">Metode Pembayaran</label>
@@ -398,7 +410,12 @@ tr:last-child td{border-bottom:none;}
       <div class="fg" style="margin-bottom:0"><label class="fl">Tgl Booking</label><input type="date" class="fc" id="bk-tgl"></div>
       <div class="fg" style="margin-bottom:0"><label class="fl">Tgl Ambil</label><input type="date" class="fc" id="bk-tgl-ambil"></div>
     </div>
-    <div class="fg"><label class="fl">Nama Pembeli</label><input list="pb-dl-bk" class="fc" id="bk-pembeli" placeholder="Nama pembeli"><datalist id="pb-dl-bk"></datalist></div>
+    <div class="fg"><label class="fl">Nama Pembeli</label>
+      <div style="position:relative;">
+        <input type="text" class="fc" id="bk-pembeli" placeholder="Ketik nama pembeli..." autocomplete="off" oninput="showSuggest(this,'bk-kontak','bk-suggest')">
+        <div id="bk-suggest" class="suggest-box" style="display:none;"></div>
+      </div>
+    </div>
     <div class="fg"><label class="fl">Kontak</label><input type="tel" class="fc" id="bk-kontak" placeholder="08xx"></div>
     <div class="fg"><label class="fl">Produk & Jumlah</label><div id="bk-items"></div><button onclick="addRow('bk-items','booking')" class="btn btn-sm btn-outline mt8">+ Produk</button></div>
     <div class="fg"><label class="fl">Catatan / Alamat Antar</label><input type="text" class="fc" id="bk-catatan" placeholder="Opsional"></div>
@@ -479,6 +496,28 @@ tr:last-child td{border-bottom:none;}
     </div>
     <div class="fg"><label class="fl">Tanggal Lunas</label><input type="date" class="fc" id="ln-tgl"></div>
     <button class="btn btn-primary btn-full" onclick="simpanLunas()">✅ Tandai Lunas</button>
+  </div>
+</div>
+
+<!-- MODAL EDIT PEMBELI -->
+<div class="mo" id="mo-edit-pb">
+  <div class="mo-box">
+    <div class="mo-hdr"><div class="mo-title">✏️ Edit Pembeli</div><button class="mo-close" onclick="closeModal('mo-edit-pb')">✕</button></div>
+    <input type="hidden" id="edit-pb-id">
+    <div class="fg"><label class="fl">Nama</label><input type="text" class="fc" id="edit-pb-nama" placeholder="Nama lengkap"></div>
+    <div class="form-row">
+      <div class="fg"><label class="fl">No. HP</label><input type="tel" class="fc" id="edit-pb-hp" placeholder="08xx"></div>
+      <div class="fg"><label class="fl">Tipe</label>
+        <select class="fc" id="edit-pb-tipe">
+          <option value="retail">🛒 Retail</option>
+          <option value="konsinyasi">🏪 Konsinyasi</option>
+          <option value="reseller">📦 Reseller</option>
+        </select>
+      </div>
+    </div>
+    <div class="fg"><label class="fl">Alamat</label><input type="text" class="fc" id="edit-pb-alamat" placeholder="Alamat (opsional)"></div>
+    <button class="btn btn-primary btn-full" onclick="simpanEditPb()">💾 Simpan</button>
+    <button class="btn btn-red btn-full" style="margin-top:6px;" onclick="hapusPb()">🗑️ Hapus Pembeli</button>
   </div>
 </div>
 
@@ -644,6 +683,9 @@ function openDetailTx(id){}
 function openEditTx(id){}
 function openLunas(id){}
 function simpanLunas(){}
+function openEditPb(id){}
+function simpanEditPb(){}
+function hapusPb(){}
 function doPrintStruk(){}
 function doPrintPDF(){}
 function doShareWA(){}
@@ -742,42 +784,48 @@ window.selectPay = function(el, groupId) {
 };
 
 function getAllPembeliOptions(){
-  // Gabungkan dari tabel pembeli + semua nama di transaksi
   const names = new Map();
-  // Dari tabel pembeli (ada kontak)
-  getPbArray().forEach(p=>{ if(p.nama) names.set(p.nama.toLowerCase(), {nama:p.nama, hp:p.hp||''}); });
-  // Dari riwayat transaksi
+  getPbArray().forEach(p=>{ if(p.nama) names.set(p.nama.toLowerCase(),{nama:p.nama,hp:p.hp||''}); });
   getTxArray().forEach(tx=>{
-    if(tx.pembeli && tx.pembeli!=='Umum'){
-      const key = tx.pembeli.toLowerCase();
-      if(!names.has(key)) names.set(key, {nama:tx.pembeli, hp:tx.kontak||''});
+    if(tx.pembeli&&tx.pembeli!=='Umum'){
+      const k=tx.pembeli.toLowerCase();
+      if(!names.has(k)) names.set(k,{nama:tx.pembeli,hp:tx.kontak||''});
     }
   });
-  // Dari booking
   getBookingArray().forEach(bk=>{
     if(bk.pembeli){
-      const key = bk.pembeli.toLowerCase();
-      if(!names.has(key)) names.set(key, {nama:bk.pembeli, hp:bk.kontak||''});
+      const k=bk.pembeli.toLowerCase();
+      if(!names.has(k)) names.set(k,{nama:bk.pembeli,hp:bk.kontak||''});
     }
   });
   return Array.from(names.values()).sort((a,b)=>a.nama.localeCompare(b.nama));
 }
 
 function buildDatalist(dlId){
-  const dl = document.getElementById(dlId);
+  const dl=document.getElementById(dlId);
   if(!dl) return;
-  dl.innerHTML = getAllPembeliOptions().map(p=>`<option value="${p.nama}"${p.hp?' data-hp="'+p.hp+'"':''}>`).join('');
+  const opts=getAllPembeliOptions();
+  dl.innerHTML=opts.map(p=>`<option value="${p.nama}">`).join('');
 }
 
-function attachPembeliAutofill(inputId, kontakId, dlId){
+function setupPembeliInput(inputId, kontakId, dlId){
   buildDatalist(dlId);
-  const inp = document.getElementById(inputId);
-  const kon = document.getElementById(kontakId);
-  if(!inp || !kon) return;
-  inp.addEventListener('input', function(){
-    const val = this.value.toLowerCase();
-    const match = getAllPembeliOptions().find(p=>p.nama.toLowerCase()===val);
-    if(match && match.hp && !kon.value) kon.value = match.hp;
+  const inp=document.getElementById(inputId);
+  const kon=document.getElementById(kontakId);
+  if(!inp||!kon) return;
+  // Clone to remove old listeners
+  const newInp=inp.cloneNode(true);
+  inp.parentNode.replaceChild(newInp,inp);
+  newInp.addEventListener('change',function(){
+    const val=this.value.trim().toLowerCase();
+    const match=getAllPembeliOptions().find(p=>p.nama.toLowerCase()===val);
+    if(match&&match.hp&&!kon.value) kon.value=match.hp;
+  });
+  // Also handle input event for live typing
+  newInp.addEventListener('input',function(){
+    const val=this.value.trim().toLowerCase();
+    const match=getAllPembeliOptions().find(p=>p.nama.toLowerCase()===val);
+    if(match&&match.hp) kon.value=match.hp;
   });
 }
 
@@ -786,8 +834,7 @@ function initModal(id){
     document.getElementById('j-tgl').value=today();
     ['j-pembeli','j-kontak','j-catatan'].forEach(i=>document.getElementById(i).value='');
     document.getElementById('j-items').innerHTML=''; addRow('j-items','jual'); calcJual();
-    attachPembeliAutofill('j-pembeli','j-kontak','pb-dl');
-    document.querySelectorAll('#j-pay-group .pay-pill').forEach(p=>p.classList.remove('active'));
+    setupPembeliInput('j-pembeli','j-kontak','pb-dl');
     document.querySelector('#j-pay-group .pay-pill[data-pay="tunai"]').classList.add('active');
   }
   if(id==='mo-masuk'){
@@ -800,7 +847,7 @@ function initModal(id){
     document.getElementById('bk-tgl-ambil').value='';
     ['bk-pembeli','bk-kontak','bk-catatan'].forEach(i=>document.getElementById(i).value='');
     document.getElementById('bk-items').innerHTML=''; addRow('bk-items','booking'); calcBooking();
-    attachPembeliAutofill('bk-pembeli','bk-kontak','pb-dl-bk');
+    setupPembeliInput('bk-pembeli','bk-kontak','pb-dl-bk');
   }
   if(id==='mo-kon'){
     document.getElementById('k-tgl').value=today();
@@ -830,7 +877,81 @@ function initModal(id){
   }
 }
 
-// ======================== KOREKSI STOK
+// ======================== CUSTOM AUTOCOMPLETE
+window.showSuggest = function(inp, kontakId, suggestId){
+  const val = inp.value.trim().toLowerCase();
+  const box = document.getElementById(suggestId);
+  if(!box) return;
+  if(!val){ box.style.display='none'; return; }
+  const all = getAllPembeliOptions();
+  const matches = all.filter(p=>p.nama.toLowerCase().includes(val));
+  if(!matches.length){ box.style.display='none'; return; }
+  box.innerHTML = matches.slice(0,8).map(p=>`
+    <div class="suggest-item" onclick="pickSuggest('${p.nama.replace(/'/g,"\\'")}','${(p.hp||'').replace(/'/g,"\\'")}','${inp.id}','${kontakId}','${suggestId}')">
+      <div class="suggest-name">${p.nama}</div>
+      ${p.hp?`<div class="suggest-hp">📱 ${p.hp}</div>`:''}
+    </div>`).join('');
+  box.style.display='block';
+};
+
+window.pickSuggest = function(nama, hp, inputId, kontakId, suggestId){
+  const inp = document.getElementById(inputId);
+  const kon = document.getElementById(kontakId);
+  const box = document.getElementById(suggestId);
+  if(inp) inp.value = nama;
+  if(kon && hp) kon.value = hp;
+  if(box) box.style.display='none';
+};
+
+// Close suggest on outside click
+document.addEventListener('click', function(e){
+  document.querySelectorAll('.suggest-box').forEach(b=>{
+    if(!b.contains(e.target) && !b.previousElementSibling.contains(e.target))
+      b.style.display='none';
+  });
+});
+// ======================== EDIT PEMBELI
+let currentEditPbId = null;
+
+window.openEditPb = function(pbId){
+  currentEditPbId = pbId;
+  const key = STATE.pembeli[pbId] ? pbId : Object.keys(STATE.pembeli).find(k=>STATE.pembeli[k].id===pbId)||pbId;
+  const pb = STATE.pembeli[key];
+  if(!pb) return;
+  document.getElementById('edit-pb-nama').value = pb.nama||'';
+  document.getElementById('edit-pb-hp').value = pb.hp||'';
+  document.getElementById('edit-pb-alamat').value = pb.alamat||'';
+  document.getElementById('edit-pb-tipe').value = pb.tipe||'retail';
+  openModal('mo-edit-pb');
+};
+
+async function simpanEditPb(){
+  const nama = document.getElementById('edit-pb-nama').value.trim();
+  if(!nama){ alert('Nama wajib!'); return; }
+  const key = STATE.pembeli[currentEditPbId] ? currentEditPbId : Object.keys(STATE.pembeli).find(k=>STATE.pembeli[k].id===currentEditPbId)||currentEditPbId;
+  setSyncStatus('syncing');
+  try{
+    await update(ref(db,`pembeli/${key}`),{
+      nama, hp:document.getElementById('edit-pb-hp').value.trim(),
+      alamat:document.getElementById('edit-pb-alamat').value.trim(),
+      tipe:document.getElementById('edit-pb-tipe').value
+    });
+    setSyncStatus(''); closeModal('mo-edit-pb');
+  }catch(e){ setSyncStatus('offline'); alert('Gagal: '+e.message); }
+}
+window.simpanEditPb=simpanEditPb;
+
+async function hapusPb(){
+  if(!confirm('Hapus data pembeli ini? Riwayat transaksinya tetap tersimpan.')) return;
+  const key = STATE.pembeli[currentEditPbId] ? currentEditPbId : Object.keys(STATE.pembeli).find(k=>STATE.pembeli[k].id===currentEditPbId)||currentEditPbId;
+  setSyncStatus('syncing');
+  try{
+    await remove(ref(db,`pembeli/${key}`));
+    setSyncStatus(''); closeModal('mo-edit-pb');
+  }catch(e){ setSyncStatus('offline'); alert('Gagal: '+e.message); }
+}
+window.hapusPb=hapusPb;
+
 async function simpanKoreksi(){
   const ket = document.getElementById('koreksi-ket').value.trim()||'Koreksi stok';
   const perubahan = [];
@@ -923,8 +1044,8 @@ async function simpanJual(){
       const pid2=genId();
       writes.push(set(ref(db,`piutang/${pid2}`),{id:pid2,txId:id,pembeli,kontak,total,metodeBayar,items,tanggal:tgl,status:'belum',createdAt:new Date().toISOString()}));
     }
-    if(pembeli!=='Umum'&&kontak&&!getPbArray().find(p=>p.nama.toLowerCase()===pembeli.toLowerCase())){
-      const pbId=genId(); writes.push(set(ref(db,`pembeli/${pbId}`),{id:pbId,nama:pembeli,hp:kontak,alamat:'',tipe:'retail'}));
+    if(pembeli!=='Umum'&&!getPbArray().find(p=>p.nama.toLowerCase()===pembeli.toLowerCase())){
+      const pbId=genId(); writes.push(set(ref(db,`pembeli/${pbId}`),{id:pbId,nama:pembeli,hp:kontak||'',alamat:'',tipe:'retail'}));
     }
     await Promise.all(writes);
     setSyncStatus(''); closeModal('mo-jual');
@@ -982,7 +1103,7 @@ async function simpanBooking(){
       writes.push(set(ref(db,`stok/${i.prodId}`),(STATE.stok[i.prodId]||0)-i.qty));
     });
     const hasPreorder=items.some(i=>{const p=PRODS.find(x=>x.id===i.prodId);return p&&p.allowZeroStock;});
-    if(kontak&&!getPbArray().find(p=>p.nama.toLowerCase()===pembeli.toLowerCase())){
+    if(pembeli&&!getPbArray().find(p=>p.nama.toLowerCase()===pembeli.toLowerCase())){
       const pbId=genId(); writes.push(set(ref(db,`pembeli/${pbId}`),{id:pbId,nama:pembeli,hp:kontak,alamat:'',tipe:'retail'}));
     }
     await Promise.all(writes);
@@ -1556,7 +1677,18 @@ function renderPembeli(){
   c.innerHTML=`<div class="card" style="padding:4px 12px;">`+pb.map(p=>{
     const tot=getTxArray().filter(t=>t.pembeli===p.nama&&(t.tipe==='penjualan'||t.tipe==='rekonsiliasi'||t.tipe==='pelunasan')&&t.total>0).reduce((s,t)=>s+(t.total||0),0);
     const hutang=getPiutangArray().filter(h=>h.pembeli===p.nama&&h.status==='belum').reduce((s,h)=>s+h.total,0);
-    return `<div class="sk-item"><div class="sk-icon">${ti[p.tipe]||'👤'}</div><div style="flex:1"><div class="sk-name">${p.nama} <span class="badge bg-gray">${tl[p.tipe]||p.tipe}</span>${hutang>0?` <span class="badge bg-red">Hutang ${fmt(hutang)}</span>`:''}</div><div class="sk-price">${p.hp||'—'}</div></div><div class="sk-right"><div style="font-weight:800;font-size:12px;color:var(--g2)">${fmt(tot)}</div></div></div>`;
+    const pbKey = Object.keys(STATE.pembeli).find(k=>STATE.pembeli[k].id===p.id||k===p.id)||p.id;
+    return `<div class="sk-item">
+      <div class="sk-icon">${ti[p.tipe]||'👤'}</div>
+      <div style="flex:1">
+        <div class="sk-name">${p.nama} <span class="badge bg-gray">${tl[p.tipe]||p.tipe}</span>${hutang>0?` <span class="badge bg-red">Hutang ${fmt(hutang)}</span>`:''}</div>
+        <div class="sk-price">${p.hp||'—'}${p.alamat?' · '+p.alamat:''}</div>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px;">
+        <div style="text-align:right;"><div style="font-weight:800;font-size:12px;color:var(--g2)">${fmt(tot)}</div></div>
+        <button class="btn btn-sm btn-outline" onclick="openEditPb('${pbKey}')" style="padding:5px 8px;">✏️</button>
+      </div>
+    </div>`;
   }).join('')+`</div>`;
 }
 
@@ -1837,6 +1969,43 @@ function hideLoading(){
   renderBeranda();
 }
 
+// Auto-sync semua nama pembeli dari transaksi ke node pembeli
+async function syncPembeliFromTx(){
+  const txArr = getTxArray();
+  const bkArr = getBookingArray();
+  const existing = new Set(Object.values(STATE.pembeli).map(p=>p.nama.toLowerCase()));
+  const writes = [];
+  const seen = new Set();
+
+  // Dari transaksi
+  txArr.forEach(tx=>{
+    if(tx.pembeli && tx.pembeli!=='Umum'){
+      const key = tx.pembeli.toLowerCase();
+      if(!existing.has(key) && !seen.has(key)){
+        seen.add(key);
+        const id = genId();
+        writes.push(set(ref(db,`pembeli/${id}`),{
+          id, nama:tx.pembeli, hp:tx.kontak||'', alamat:'', tipe:'retail'
+        }));
+      }
+    }
+  });
+  // Dari booking
+  bkArr.forEach(bk=>{
+    if(bk.pembeli){
+      const key = bk.pembeli.toLowerCase();
+      if(!existing.has(key) && !seen.has(key)){
+        seen.add(key);
+        const id = genId();
+        writes.push(set(ref(db,`pembeli/${id}`),{
+          id, nama:bk.pembeli, hp:bk.kontak||'', alamat:'', tipe:'retail'
+        }));
+      }
+    }
+  });
+  if(writes.length) await Promise.all(writes).catch(()=>{});
+}
+
 // Sembunyikan loading saat data pertama masuk
 onValue(ref(db,'stok'), snap=>{
   STATE.stok=snap.val()||{};
@@ -1845,11 +2014,24 @@ onValue(ref(db,'stok'), snap=>{
 });
 
 onValue(ref(db,'stokKon'),  snap=>{STATE.stokKon=snap.val()||{};renderCurrentPage();});
-onValue(ref(db,'tx'),       snap=>{STATE.tx=snap.val()||{};renderCurrentPage();});
 onValue(ref(db,'konsinyasi'),snap=>{STATE.konsinyasi=snap.val()||{};renderCurrentPage();});
-onValue(ref(db,'pembeli'),  snap=>{STATE.pembeli=snap.val()||{};renderCurrentPage();});
 onValue(ref(db,'booking'),  snap=>{STATE.booking=snap.val()||{};renderCurrentPage();});
 onValue(ref(db,'piutang'),  snap=>{STATE.piutang=snap.val()||{};renderCurrentPage();});
+
+// Saat tx loaded, sync pembeli juga
+onValue(ref(db,'tx'), snap=>{
+  STATE.tx=snap.val()||{};
+  renderCurrentPage();
+  // Sync setelah pembeli juga loaded
+  if(Object.keys(STATE.pembeli).length>=0) syncPembeliFromTx();
+});
+
+onValue(ref(db,'pembeli'), snap=>{
+  STATE.pembeli=snap.val()||{};
+  renderCurrentPage();
+  // Sync pembeli dari tx setelah keduanya loaded
+  if(Object.keys(STATE.tx).length>0) syncPembeliFromTx();
+});
 
 // Fallback: kalau 4 detik belum konek juga, tampilkan app apa adanya
 setTimeout(hideLoading, 4000);
