@@ -986,6 +986,8 @@ async function simpanKoreksi(){
 window.simpanKoreksi=simpanKoreksi;
 
 function addRow(cid,type){
+  const c=document.getElementById(cid);
+  if(!c) return;
   const div=document.createElement('div'); div.className='item-row';
   const isCalc=type==='jual'||type==='booking';
   const cb=isCalc?' onchange="'+(type==='jual'?'calcJual':'calcBooking')+'()"':'';
