@@ -2065,12 +2065,57 @@ function renderHarian(){
   const byDate={};
   getIncomeTx().forEach(t=>{
     const tgl = t.tanggalEfektif;
-    if(!byDate[tgl]) byDate[tgl]={total:0,count:0};
-    byDate[tgl].total+=t.totalEfektif||0; byDate[tgl].count++;
+    if(!byDate[tgl]) byDate[tgl]={total:0,count:0,items:[]};
+    byDate[tgl].total+=t.totalEfektif||0;
+    byDate[tgl].count++;
+    byDate[tgl].items.push(t);
   });
   const dates=Object.keys(byDate).sort().reverse();
-  document.getElementById('list-harian').innerHTML=dates.length?dates.map(d=>`<div class="har-row"><div><div class="har-date">${fmtD(d)}</div><div class="har-sub">${byDate[d].count} transaksi</div></div><div class="har-amt">${fmt(byDate[d].total)}</div></div>`).join(''):`<div class="empty"><div class="empty-icon">📅</div><div class="empty-txt">Belum ada data</div></div>`;
+  const c = document.getElementById('list-harian');
+  if(!dates.length){c.innerHTML=`<div class="empty"><div class="empty-icon">📅</div><div class="empty-txt">Belum ada data</div></div>`;return;}
+  c.innerHTML = dates.map(d=>`
+    <div style="margin-bottom:6px;">
+      <div class="har-row" onclick="toggleHarianDetail('${d}')" style="cursor:pointer;">
+        <div>
+          <div class="har-date">${fmtD(d)}</div>
+          <div class="har-sub">${byDate[d].count} transaksi · ketuk untuk detail</div>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px;">
+          <div class="har-amt">${fmt(byDate[d].total)}</div>
+          <span id="arrow-${d}" style="color:var(--muted);font-size:12px;">▼</span>
+        </div>
+      </div>
+      <div id="detail-${d}" style="display:none;background:white;border:1px solid var(--border);border-top:none;border-radius:0 0 var(--r) var(--r);padding:4px 12px;margin-top:-6px;padding-top:6px;">
+        ${byDate[d].items.sort((a,b)=>new Date(b.createdAt)-new Date(a.createdAt)).map(t=>{
+          const pihak = t.pembeli||t.toko||'-';
+          const metode = t.metodeBayarEfektif&&t.metodeBayarEfektif!=='tunai'
+            ? `<span class="badge bg-blue" style="font-size:10px;">${PAY_LABEL[t.metodeBayarEfektif]||t.metodeBayarEfektif}</span>`
+            : '';
+          const prodList = t.items ? t.items.map(i=>`${i.nama} ×${i.qty||i.terjual||0}`).join(', ') : '';
+          return `<div style="display:flex;justify-content:space-between;align-items:flex-start;padding:8px 0;border-bottom:1px solid #f5f5f5;gap:8px;">
+            <div style="flex:1;min-width:0;">
+              <div style="font-weight:600;font-size:12px;">${pihak} ${metode}</div>
+              <div style="font-size:10px;color:var(--muted);margin-top:2px;">${prodList}</div>
+              ${t.sumber==='hutang-lunas'?`<div style="font-size:10px;color:var(--g3);">↳ Lunas ${fmtD(t.tanggalEfektif)} (jual ${fmtD(t.tanggal)})</div>`:''}
+            </div>
+            <div style="font-weight:700;font-size:13px;color:var(--g2);white-space:nowrap;">+${fmt(t.totalEfektif||0)}</div>
+          </div>`;
+        }).join('')}
+        <div style="display:flex;justify-content:space-between;padding:8px 0;font-weight:800;font-size:13px;color:var(--g2);">
+          <span>Total</span><span>${fmt(byDate[d].total)}</span>
+        </div>
+      </div>
+    </div>`).join('');
 }
+
+window.toggleHarianDetail = function(tgl){
+  const el = document.getElementById('detail-'+tgl);
+  const arrow = document.getElementById('arrow-'+tgl);
+  if(!el) return;
+  const open = el.style.display==='block';
+  el.style.display = open?'none':'block';
+  if(arrow) arrow.textContent = open?'▼':'▲';
+};
 
 function renderPerProduk(){
   const bp={};
