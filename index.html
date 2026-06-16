@@ -24,6 +24,46 @@
 html,body{height:100%;}
 body{font-family:var(--font);background:var(--bg);color:var(--text);font-size:13px;line-height:1.4;overscroll-behavior:none;}
 
+/* LOGIN SCREEN */
+#login-screen{
+  position:fixed;inset:0;z-index:9999;
+  background:linear-gradient(160deg,var(--g1) 0%,var(--g2) 60%,var(--g3) 100%);
+  display:flex;align-items:center;justify-content:center;padding:24px;
+}
+.login-box{
+  background:white;border-radius:20px;padding:32px 24px;
+  width:100%;max-width:360px;
+  box-shadow:0 20px 60px rgba(0,0,0,0.3);
+}
+.login-logo{text-align:center;margin-bottom:24px;}
+.login-logo .fish{font-size:48px;line-height:1;}
+.login-logo h1{font-size:22px;font-weight:800;color:var(--g2);margin-top:8px;letter-spacing:-0.5px;}
+.login-logo p{font-size:12px;color:var(--muted);margin-top:2px;}
+.login-field{margin-bottom:14px;}
+.login-label{font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.3px;display:block;margin-bottom:5px;}
+.login-input{
+  width:100%;padding:12px 14px;border:1.5px solid var(--border);
+  border-radius:10px;font-size:14px;font-family:var(--font);
+  outline:none;transition:border 0.15s;
+}
+.login-input:focus{border-color:var(--g4);}
+.login-btn{
+  width:100%;padding:13px;background:var(--g2);color:white;
+  border:none;border-radius:10px;font-size:15px;font-weight:700;
+  font-family:var(--font);cursor:pointer;margin-top:6px;
+  transition:background 0.15s;
+}
+.login-btn:active{background:var(--g1);}
+.login-error{
+  background:var(--redpale);color:var(--red);
+  border-radius:8px;padding:10px 12px;font-size:12px;
+  font-weight:600;text-align:center;margin-top:10px;display:none;
+}
+.login-footer{text-align:center;margin-top:20px;font-size:11px;color:var(--muted);}
+
+/* APP WRAPPER */
+#app-wrapper{display:none;}
+
 .topbar{background:linear-gradient(135deg,var(--g1) 0%,var(--g2) 100%);color:white;padding:10px 14px 8px;position:sticky;top:0;z-index:100;display:flex;align-items:center;gap:10px;}
 .topbar-icon{font-size:20px;line-height:1;}
 .topbar-left{flex:1;}
@@ -226,6 +266,31 @@ tr:last-child td{border-bottom:none;}
 </head>
 <body>
 
+<!-- LOGIN SCREEN -->
+<div id="login-screen">
+  <div class="login-box">
+    <div class="login-logo">
+      <div class="fish">🐟</div>
+      <h1>IZZAN FROZEN</h1>
+      <p>Manajemen Usaha Lele</p>
+    </div>
+    <div class="login-field">
+      <label class="login-label">Username</label>
+      <input type="text" class="login-input" id="login-user" placeholder="Masukkan username" autocomplete="username" autocapitalize="none">
+    </div>
+    <div class="login-field">
+      <label class="login-label">Password</label>
+      <input type="password" class="login-input" id="login-pass" placeholder="Masukkan password" autocomplete="current-password" onkeydown="if(event.key==='Enter')doLogin()">
+    </div>
+    <button class="login-btn" onclick="doLogin()">🔓 Masuk</button>
+    <div class="login-error" id="login-error">❌ Username atau password salah</div>
+    <div class="login-footer">🔒 Akses terbatas · IZZAN FROZEN</div>
+  </div>
+</div>
+
+<!-- APP WRAPPER -->
+<div id="app-wrapper">
+
 <div id="loading-screen">
   <div class="ls-icon">🐟</div>
   <div class="ls-spinner"></div>
@@ -238,6 +303,10 @@ tr:last-child td{border-bottom:none;}
   <div class="topbar-right">
     <div><span class="sync-dot" id="sync-dot"></span><span id="sync-status">Terhubung</span></div>
     <div id="topbarDate"></div>
+    <div style="display:flex;align-items:center;gap:6px;margin-top:2px;">
+      <span id="topbar-user" style="font-size:10px;opacity:0.8;"></span>
+      <button onclick="doLogout()" style="font-size:10px;padding:2px 7px;border-radius:4px;border:1px solid rgba(255,255,255,0.4);background:rgba(255,255,255,0.15);color:white;cursor:pointer;">Keluar</button>
+    </div>
   </div>
 </div>
 
@@ -2073,6 +2142,65 @@ onValue(ref(db,'pembeli'), snap=>{
 setTimeout(hideLoading, 4000);
 
 if('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(()=>{});
+</script>
+
+</div><!-- end app-wrapper -->
+
+<!-- LOGIN LOGIC -->
+<script>
+var USERS = {
+  'admin':    { pass: 'izzan2024', role: 'Admin' },
+  'operator': { pass: 'lele2024',  role: 'Operator' },
+  'owner':    { pass: 'izzan888',  role: 'Owner' }
+};
+var SESSION_KEY = 'izzan_session';
+
+function checkSession(){
+  try{
+    var s = sessionStorage.getItem(SESSION_KEY);
+    if(s){ var d=JSON.parse(s); if(d&&d.user&&USERS[d.user]) return d; }
+  }catch(e){}
+  return null;
+}
+
+function doLogin(){
+  var user = document.getElementById('login-user').value.trim().toLowerCase();
+  var pass = document.getElementById('login-pass').value;
+  var err  = document.getElementById('login-error');
+  err.style.display='none';
+  if(USERS[user] && USERS[user].pass===pass){
+    sessionStorage.setItem(SESSION_KEY, JSON.stringify({user:user, role:USERS[user].role}));
+    showApp(user, USERS[user].role);
+  } else {
+    err.style.display='block';
+    document.getElementById('login-pass').value='';
+    document.getElementById('login-pass').focus();
+  }
+}
+
+function showApp(user, role){
+  document.getElementById('login-screen').style.display='none';
+  document.getElementById('app-wrapper').style.display='block';
+  // Tampilkan role di topbar kanan
+  var el = document.getElementById('topbar-user');
+  if(el) el.textContent = role;
+}
+
+function doLogout(){
+  sessionStorage.removeItem(SESSION_KEY);
+  location.reload();
+}
+
+window.addEventListener('DOMContentLoaded', function(){
+  var session = checkSession();
+  if(session){
+    showApp(session.user, session.role);
+  } else {
+    document.getElementById('login-screen').style.display='flex';
+    document.getElementById('app-wrapper').style.display='none';
+    setTimeout(function(){ document.getElementById('login-user').focus(); }, 100);
+  }
+});
 </script>
 </body>
 </html>
