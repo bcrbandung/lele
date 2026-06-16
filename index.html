@@ -480,6 +480,46 @@ tr:last-child td{border-bottom:none;}
   </div>
 </div>
 
+<!-- MODAL STRUK -->
+<div class="mo" id="mo-struk">
+  <div class="mo-box">
+    <div class="mo-hdr">
+      <div class="mo-title">🖨️ Struk & Invoice</div>
+      <button class="mo-close" onclick="closeModal('mo-struk')">✕</button>
+    </div>
+    <!-- STRUK PREVIEW -->
+    <div id="struk-preview" style="background:#fff;border:1px solid var(--border);border-radius:8px;padding:12px;margin-bottom:12px;font-family:'Courier New',monospace;font-size:12px;line-height:1.6;max-height:55vh;overflow-y:auto;"></div>
+    <!-- ACTION BUTTONS -->
+    <div style="display:flex;flex-direction:column;gap:8px;">
+      <button class="btn btn-primary btn-full" onclick="doPrintStruk()" id="btn-bluetooth-print">
+        🖨️ Print via Bluetooth
+      </button>
+      <button class="btn btn-outline btn-full" onclick="doPrintPDF()">
+        📥 Simpan / Print PDF
+      </button>
+      <button class="btn btn-gray btn-full" onclick="doShareWA()">
+        💬 Share teks ke WhatsApp
+      </button>
+    </div>
+    <div id="bt-status" style="font-size:11px;color:var(--muted);text-align:center;margin-top:8px;"></div>
+  </div>
+</div>
+
+<!-- MODAL INVOICE WA -->
+<div class="mo" id="mo-invoice">
+  <div class="mo-box">
+    <div class="mo-hdr">
+      <div class="mo-title">📄 Invoice</div>
+      <button class="mo-close" onclick="closeModal('mo-invoice')">✕</button>
+    </div>
+    <div id="invoice-preview" style="background:#fff;border:1px dashed var(--border);border-radius:8px;padding:16px;margin-bottom:12px;max-height:55vh;overflow-y:auto;"></div>
+    <div style="display:flex;flex-direction:column;gap:8px;">
+      <button class="btn btn-primary btn-full" onclick="doPrintPDF()">📥 Download / Print PDF</button>
+      <button class="btn btn-gray btn-full" onclick="doShareWA()">💬 Copy Teks → WA</button>
+    </div>
+  </div>
+</div>
+
 <!-- MODAL DETAIL TRANSAKSI -->
 <div class="mo" id="mo-detail">
   <div class="mo-box">
@@ -1080,9 +1120,16 @@ window.openDetailTx = function(txId){
 
   // Actions
   const canEdit = tx.tipe==='penjualan'||tx.tipe==='pembelian'||tx.tipe==='retur';
-  document.getElementById('detail-actions').innerHTML = canEdit
-    ? `<button class="btn btn-outline" onclick="closeModal('mo-detail');openEditTx('${tx.id}')">✏️ Edit</button>`
-    : `<div style="font-size:11px;color:var(--muted);">Transaksi ini tidak bisa diedit langsung</div>`;
+  const canStruk = tx.tipe==='penjualan'||tx.tipe==='rekonsiliasi'||tx.tipe==='pelunasan';
+  const txIdSafe = tx.id||firebaseKey;
+  document.getElementById('detail-actions').innerHTML = `
+    ${canStruk?`
+      <button class="btn btn-primary btn-sm" onclick="printStruk('${txIdSafe}')">🖨️ Print Struk</button>
+      <button class="btn btn-outline btn-sm" onclick="shareInvoiceWA('${txIdSafe}')">📄 Invoice WA</button>
+    `:''}
+    ${canEdit?`<button class="btn btn-gray btn-sm" onclick="closeModal('mo-detail');openEditTx('${txIdSafe}')">✏️ Edit</button>`:''}
+    ${!canStruk&&!canEdit?`<div style="font-size:11px;color:var(--muted);">Transaksi ini tidak bisa diedit langsung</div>`:''}
+  `;
 
   openModal('mo-detail');
 };
@@ -1363,7 +1410,267 @@ function renderPembeli(){
   }).join('')+`</div>`;
 }
 
-// ======================== INIT
+// ======================== STRUK & INVOICE
+let currentStrukTx = null;
+
+function getTxForStruk(txId){
+  let tx = STATE.tx[txId];
+  if(!tx) tx = Object.values(STATE.tx).find(t=>t.id===txId);
+  if(!tx) return null;
+  const key = STATE.tx[txId] ? txId : Object.keys(STATE.tx).find(k=>STATE.tx[k].id===txId)||txId;
+  return {...tx, id:tx.id||key, _key:key};
+}
+
+function buildStrukText(tx){
+  const NAMA_TOKO   = 'BCR BANDUNG';
+  const ALAMAT_TOKO = 'Bandung, Jawa Barat';
+  const NO_WA       = '08xx-xxxx-xxxx';
+  const w = 32; // lebar struk 58mm ≈ 32 char
+  const line  = '─'.repeat(w);
+  const dline = '═'.repeat(w);
+  const center = (s) => { const p=Math.max(0,Math.floor((w-s.length)/2)); return ' '.repeat(p)+s; };
+  const ljust  = (a,b,total) => { const sp=Math.max(1,total-a.length-b.length); return a+' '.repeat(sp)+b; };
+
+  const items = tx.items||[];
+  const total = tx.totalAsli||tx.total||0;
+  const pihak = tx.pembeli||tx.toko||'-';
+  const metode = PAY_LABEL[tx.metodeBayar]||tx.metodeBayar||'Tunai';
+  const isHutang = tx.metodeBayar==='hutang';
+
+  let s = '';
+  s += center(NAMA_TOKO)+'\n';
+  s += center(ALAMAT_TOKO)+'\n';
+  s += center('WA: '+NO_WA)+'\n';
+  s += dline+'\n';
+  s += ljust('No:', tx.id?tx.id.toUpperCase().substr(-8):'-', w)+'\n';
+  s += ljust('Tgl:', fmtD(tx.tanggal), w)+'\n';
+  s += ljust('Pembeli:', pihak, w)+'\n';
+  if(tx.kontak) s += ljust('Kontak:', tx.kontak, w)+'\n';
+  s += line+'\n';
+  items.forEach(i=>{
+    const qty = i.qty||i.terjual||0;
+    const sub = fmt(qty*(i.harga||0));
+    s += (i.nama||i.prodId)+'\n';
+    s += ljust('  '+qty+' x '+fmt(i.harga||0), sub, w)+'\n';
+  });
+  s += dline+'\n';
+  s += ljust('TOTAL', fmt(total), w)+'\n';
+  s += ljust('Bayar', metode, w)+'\n';
+  if(isHutang) s += center('*** BELUM LUNAS ***')+'\n';
+  s += dline+'\n';
+  s += center('Terima kasih!')+'\n';
+  s += center('Produk segar & halal')+'\n';
+  return s;
+}
+
+function buildInvoiceHTML(tx){
+  const items = tx.items||[];
+  const total = tx.totalAsli||tx.total||0;
+  const pihak = tx.pembeli||tx.toko||'-';
+  const metode = PAY_LABEL[tx.metodeBayar]||tx.metodeBayar||'Tunai';
+  const isHutang = tx.metodeBayar==='hutang';
+  const noInv = 'INV-'+(tx.id?tx.id.toUpperCase().substr(-8):Date.now().toString(36).toUpperCase());
+
+  return `
+  <div style="font-family:'Segoe UI',sans-serif;max-width:480px;margin:0 auto;">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:16px;">
+      <div>
+        <div style="font-size:18px;font-weight:800;color:#0f4c35;">🐟 BCR Bandung</div>
+        <div style="font-size:11px;color:#6b7c74;">Produk Ikan Segar & Olahan</div>
+      </div>
+      <div style="text-align:right;">
+        <div style="font-size:13px;font-weight:700;">${noInv}</div>
+        <div style="font-size:11px;color:#6b7c74;">${fmtD(tx.tanggal)}</div>
+      </div>
+    </div>
+    <div style="background:#f0f4f2;border-radius:8px;padding:10px 12px;margin-bottom:12px;font-size:12px;">
+      <div style="font-weight:700;margin-bottom:4px;">Kepada:</div>
+      <div style="font-weight:600;">${pihak}</div>
+      ${tx.kontak?`<div style="color:#6b7c74;">${tx.kontak}</div>`:''}
+    </div>
+    <table style="width:100%;border-collapse:collapse;font-size:12px;margin-bottom:12px;">
+      <thead>
+        <tr style="background:#0f4c35;color:white;">
+          <th style="padding:8px;text-align:left;border-radius:6px 0 0 0;">Produk</th>
+          <th style="padding:8px;text-align:center;">Qty</th>
+          <th style="padding:8px;text-align:right;">Harga</th>
+          <th style="padding:8px;text-align:right;border-radius:0 6px 0 0;">Subtotal</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${items.map((i,idx)=>{
+          const qty=i.qty||i.terjual||0;
+          return `<tr style="background:${idx%2?'#f8faf9':'white'}">
+            <td style="padding:8px;border-bottom:1px solid #e5e7eb;">${i.nama||i.prodId}</td>
+            <td style="padding:8px;text-align:center;border-bottom:1px solid #e5e7eb;">${qty}</td>
+            <td style="padding:8px;text-align:right;border-bottom:1px solid #e5e7eb;">${fmt(i.harga||0)}</td>
+            <td style="padding:8px;text-align:right;border-bottom:1px solid #e5e7eb;">${fmt(qty*(i.harga||0))}</td>
+          </tr>`;
+        }).join('')}
+      </tbody>
+    </table>
+    <div style="background:#0f4c35;color:white;border-radius:8px;padding:12px;display:flex;justify-content:space-between;font-weight:800;font-size:16px;margin-bottom:10px;">
+      <span>TOTAL</span><span>${fmt(total)}</span>
+    </div>
+    <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:4px;">
+      <span style="color:#6b7c74;">Metode Pembayaran</span>
+      <span style="font-weight:600;">${metode}</span>
+    </div>
+    ${isHutang?`<div style="background:#fef2f2;border:1.5px solid #fecaca;border-radius:6px;padding:8px;text-align:center;font-size:12px;font-weight:700;color:#dc2626;margin-top:8px;">⚠️ BELUM LUNAS — Mohon segera dilunasi</div>`:''}
+    <div style="text-align:center;margin-top:16px;font-size:11px;color:#6b7c74;border-top:1px dashed #e5e7eb;padding-top:12px;">
+      Terima kasih atas kepercayaan Anda 🙏<br>BCR Bandung · Produk segar & halal
+    </div>
+  </div>`;
+}
+
+function buildWAText(tx){
+  const items = tx.items||[];
+  const total = tx.totalAsli||tx.total||0;
+  const pihak = tx.pembeli||tx.toko||'-';
+  const metode = PAY_LABEL[tx.metodeBayar]||tx.metodeBayar||'Tunai';
+  const isHutang = tx.metodeBayar==='hutang';
+  const noInv = 'INV-'+(tx.id?tx.id.toUpperCase().substr(-8):'-');
+
+  let t = `🐟 *BCR BANDUNG*\n`;
+  t += `━━━━━━━━━━━━━━━━━━\n`;
+  t += `*${noInv}*\n`;
+  t += `📅 ${fmtD(tx.tanggal)}\n`;
+  t += `👤 ${pihak}${tx.kontak?' ('+tx.kontak+')':''}\n`;
+  t += `━━━━━━━━━━━━━━━━━━\n`;
+  items.forEach(i=>{
+    const qty=i.qty||i.terjual||0;
+    t += `• ${i.nama||i.prodId}\n  ${qty} pcs × ${fmt(i.harga||0)} = *${fmt(qty*(i.harga||0))}*\n`;
+  });
+  t += `━━━━━━━━━━━━━━━━━━\n`;
+  t += `*TOTAL: ${fmt(total)}*\n`;
+  t += `💳 Bayar: ${metode}\n`;
+  if(isHutang) t += `⚠️ *BELUM LUNAS*\n`;
+  t += `━━━━━━━━━━━━━━━━━━\n`;
+  t += `Terima kasih! 🙏`;
+  return t;
+}
+
+window.printStruk = function(txId){
+  closeModal('mo-detail');
+  const tx = getTxForStruk(txId);
+  if(!tx) return;
+  currentStrukTx = tx;
+  const preview = document.getElementById('struk-preview');
+  preview.textContent = buildStrukText(tx);
+  document.getElementById('bt-status').textContent = '';
+  // Check bluetooth support
+  const btBtn = document.getElementById('btn-bluetooth-print');
+  if(!navigator.bluetooth){
+    btBtn.disabled = true;
+    btBtn.textContent = '🖨️ Bluetooth tidak didukung browser ini';
+    btBtn.style.opacity = '0.5';
+  } else {
+    btBtn.disabled = false;
+    btBtn.textContent = '🖨️ Print via Bluetooth';
+    btBtn.style.opacity = '1';
+  }
+  openModal('mo-struk');
+};
+
+window.shareInvoiceWA = function(txId){
+  closeModal('mo-detail');
+  const tx = getTxForStruk(txId);
+  if(!tx) return;
+  currentStrukTx = tx;
+  document.getElementById('invoice-preview').innerHTML = buildInvoiceHTML(tx);
+  openModal('mo-invoice');
+};
+
+window.doPrintStruk = async function(){
+  if(!currentStrukTx) return;
+  const btStatus = document.getElementById('bt-status');
+  if(!navigator.bluetooth){
+    btStatus.textContent = '⚠️ Gunakan Chrome di Android untuk print Bluetooth';
+    return;
+  }
+  btStatus.textContent = '🔍 Mencari printer...';
+  try{
+    // Request Bluetooth device — filter printer thermal umum
+    const device = await navigator.bluetooth.requestDevice({
+      filters:[
+        {namePrefix:'MTP'},
+        {namePrefix:'RPP'},
+        {namePrefix:'BlueTooth Printer'},
+        {namePrefix:'Printer'},
+        {namePrefix:'POS'},
+      ],
+      optionalServices:['000018f0-0000-1000-8000-00805f9b34fb']
+    });
+    btStatus.textContent = '🔗 Menghubungkan ke '+device.name+'...';
+    const server = await device.gatt.connect();
+    const service = await server.getPrimaryService('000018f0-0000-1000-8000-00805f9b34fb');
+    const characteristic = await service.getCharacteristic('00002af1-0000-1000-8000-00805f9b34fb');
+
+    // Encode struk ke bytes (ESC/POS)
+    const text = buildStrukText(currentStrukTx);
+    const encoder = new TextEncoder();
+    const ESC = 0x1B, GS = 0x1D;
+    // Init printer + center + bold header
+    const init = new Uint8Array([ESC,0x40]); // ESC @ = init
+    const cutPaper = new Uint8Array([GS,0x56,0x01]); // cut paper
+    const textBytes = encoder.encode(text+'\n\n\n');
+    const fullBytes = new Uint8Array(init.length+textBytes.length+cutPaper.length);
+    fullBytes.set(init,0); fullBytes.set(textBytes,init.length); fullBytes.set(cutPaper,init.length+textBytes.length);
+
+    // Kirim per chunk 20 bytes (BLE limit)
+    const CHUNK = 20;
+    for(let i=0;i<fullBytes.length;i+=CHUNK){
+      await characteristic.writeValue(fullBytes.slice(i,i+CHUNK));
+    }
+    btStatus.innerHTML = '✅ <span style="color:var(--g3)">Struk berhasil dicetak!</span>';
+    device.gatt.disconnect();
+  }catch(e){
+    if(e.name==='NotFoundError'){
+      btStatus.textContent = '❌ Printer tidak ditemukan / dibatalkan';
+    } else {
+      btStatus.textContent = '❌ Gagal: '+e.message;
+    }
+  }
+};
+
+window.doPrintPDF = function(){
+  if(!currentStrukTx) return;
+  // Buka jendela print dengan konten invoice
+  const invoiceHTML = buildInvoiceHTML(currentStrukTx);
+  const win = window.open('','_blank','width=600,height=800');
+  win.document.write(`<!DOCTYPE html><html><head>
+    <meta charset="UTF-8">
+    <title>Invoice BCR Bandung</title>
+    <style>
+      body{font-family:'Segoe UI',sans-serif;padding:20px;max-width:480px;margin:0 auto;}
+      @media print{body{padding:0;}}
+      @page{margin:10mm;}
+    </style>
+  </head><body>${invoiceHTML}</body></html>`);
+  win.document.close();
+  setTimeout(()=>win.print(),500);
+};
+
+window.doShareWA = function(){
+  if(!currentStrukTx) return;
+  const text = buildWAText(currentStrukTx);
+  // Copy ke clipboard
+  if(navigator.clipboard){
+    navigator.clipboard.writeText(text).then(()=>{
+      // Coba buka WA langsung kalau ada nomor kontak
+      const noWA = currentStrukTx.kontak?currentStrukTx.kontak.replace(/[^0-9]/g,''):'';
+      if(noWA){
+        const waNum = noWA.startsWith('0') ? '62'+noWA.substr(1) : noWA;
+        window.open('https://wa.me/'+waNum+'?text='+encodeURIComponent(text),'_blank');
+      } else {
+        alert('✅ Teks invoice sudah di-copy!\nBuka WhatsApp dan paste ke chat pembeli.');
+      }
+    });
+  } else {
+    // Fallback: buka WA dengan teks
+    window.open('https://wa.me/?text='+encodeURIComponent(text),'_blank');
+  }
+};
 function updateClock(){
   const now = new Date();
   const tgl = now.toLocaleDateString('id-ID',{day:'numeric',month:'long',year:'numeric'});
