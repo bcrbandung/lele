@@ -614,7 +614,7 @@ const PRODS = [
   {id:'KL', name:'Katsu Lele',               price:35000, icon:'🍱'},
   {id:'LA', name:'Lele Asap',                price:38000, icon:'💨'},
   {id:'NB', name:'Nila Bumbu',               price:43000, icon:'🐡'},
-  {id:'TP', name:'Tahu Pananya',             price:13000, icon:'🟨', preorder:true},
+  {id:'TP', name:'Tahu Pananya',             price:13000, icon:'🟨', allowZeroStock:true},
 ];
 
 let STATE = {tx:{}, konsinyasi:{}, pembeli:{}, stok:{}, stokKon:{}, booking:{}, piutang:{}};
@@ -625,7 +625,7 @@ const genId = () => Date.now().toString(36)+Math.random().toString(36).substr(2,
 const fmt   = n => 'Rp '+Math.round(n).toLocaleString('id-ID');
 const fmtD  = d => new Date(d).toLocaleDateString('id-ID',{day:'numeric',month:'short',year:'numeric'});
 const today = () => new Date().toISOString().substr(0,10);
-const prodOpts = () => `<option value="">— Produk —</option>`+PRODS.map(p=>`<option value="${p.id}" data-price="${p.price}">${p.icon} ${p.name}${p.preorder?' [PO]':''} (${fmt(p.price)})</option>`).join('');
+const prodOpts = () => `<option value="">— Produk —</option>`+PRODS.map(p=>`<option value="${p.id}" data-price="${p.price}">${p.icon} ${p.name}${p.allowZeroStock?' [PO]':''} (${fmt(p.price)})</option>`).join('');
 
 const PAY_LABEL = {tunai:'💵 Tunai', qris:'📱 QRIS', hutang:'📒 Hutang', transfer:'🏦 Transfer', others:'💳 Lainnya'};
 
@@ -818,7 +818,7 @@ async function simpanBooking(){
 
   for(const i of items){
     const prod = PRODS.find(x=>x.id===i.prodId);
-    if(!prod.preorder && (STATE.stok[i.prodId]||0)<i.qty){
+    if(!prod.allowZeroStock && (STATE.stok[i.prodId]||0)<i.qty){
       alert(`Stok ${i.nama} kurang!\nAda: ${STATE.stok[i.prodId]||0}, Minta: ${i.qty}`); return;
     }
   }
@@ -828,12 +828,12 @@ async function simpanBooking(){
     const id=genId();
     const bk={id,pembeli,kontak,tanggal:tgl,tanggalAmbil:tglAmbil||'',catatan,items,total,status:'pending',createdAt:new Date().toISOString()};
     const writes=[set(ref(db,`booking/${id}`),bk)];
-    // Stok berkurang kecuali produk preorder
+    // Stok selalu berkurang saat booking (termasuk Tahu Pananya)
+    // allowZeroStock hanya berarti boleh booking meski stok 0
     items.forEach(i=>{
-      const prod=PRODS.find(x=>x.id===i.prodId);
-      if(!prod.preorder) writes.push(set(ref(db,`stok/${i.prodId}`),(STATE.stok[i.prodId]||0)-i.qty));
+      writes.push(set(ref(db,`stok/${i.prodId}`),(STATE.stok[i.prodId]||0)-i.qty));
     });
-    const hasPreorder=items.some(i=>PRODS.find(x=>x.id===i.prodId)&&PRODS.find(x=>x.id===i.prodId).preorder);
+    const hasPreorder=items.some(i=>{const p=PRODS.find(x=>x.id===i.prodId);return p&&p.allowZeroStock;});
     if(kontak&&!getPbArray().find(p=>p.nama.toLowerCase()===pembeli.toLowerCase())){
       const pbId=genId(); writes.push(set(ref(db,`pembeli/${pbId}`),{id:pbId,nama:pembeli,hp:kontak,alamat:'',tipe:'retail'}));
     }
@@ -890,10 +890,9 @@ window.batalBooking = async function(bookingId){
   setSyncStatus('syncing');
   try{
     const writes=[update(ref(db,`booking/${bookingId}`),{status:'batal',tanggalBatal:today()})];
-    // Kembalikan stok hanya untuk produk non-preorder
+    // Kembalikan stok semua produk saat batal
     bk.items.forEach(i=>{
-      const prod=PRODS.find(x=>x.id===i.prodId);
-      if(!prod || !prod.preorder) writes.push(set(ref(db,`stok/${i.prodId}`),(STATE.stok[i.prodId]||0)+i.qty));
+      writes.push(set(ref(db,`stok/${i.prodId}`),(STATE.stok[i.prodId]||0)+i.qty));
     });
     await Promise.all(writes);
     setSyncStatus(''); alert('✅ Booking dibatalkan, stok dikembalikan.');
@@ -1302,7 +1301,8 @@ function renderKartu(){
     else if(tx.tipe==='rekonsiliasi'){masuk=(item.retur||0)+(item.sisa||0);keluar=item.terjual||0;}
     saldo+=masuk-keluar;
     const lbl={penjualan:'Jual',pembelian:'Beli',retur:'Retur',konsinyasi:'Kon.',rekonsiliasi:'Rekon'}[tx.tipe]||tx.tipe;
-    return `<tr><td>${fmtD(tx.tanggal)}</td><td><span class="badge bg-gray">${lbl}</span><br><span class="muted" style="font-size:10px">${tx.pembeli||tx.supplier||tx.toko||'-'}</span></td><td class="tr green">${masuk>0?'+'+masuk:''}</td><td class="tr red">${keluar>0?'-'+keluar:''}</td><td class="tr bold">${saldo}</td></tr>`;
+    const tglWaktu = fmtD(tx.tanggal) + (tx.createdAt ? '<br><span style="font-size:9px;color:var(--muted)">'+new Date(tx.createdAt).toLocaleTimeString('id-ID',{hour:'2-digit',minute:'2-digit'})+'</span>' : '');
+    return `<tr><td>${tglWaktu}</td><td><span class="badge bg-gray">${lbl}</span><br><span class="muted" style="font-size:10px">${tx.pembeli||tx.supplier||tx.toko||'-'}</span></td><td class="tr green">${masuk>0?'+'+masuk:''}</td><td class="tr red">${keluar>0?'-'+keluar:''}</td><td class="tr bold">${saldo}</td></tr>`;
   });
   c.innerHTML=`<div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;"><div style="font-size:30px;">${p.icon}</div><div style="flex:1"><div class="bold">${p.name}</div><div class="muted" style="font-size:10px">${fmt(p.price)}/pcs</div></div><div class="sk-right"><div class="sk-qty">${STATE.stok[pid]||0}</div><div class="sk-sub">stok kini</div></div></div>${rows.length?`<div class="tw"><table><thead><tr><th>Tgl</th><th>Ket.</th><th class="tr">Msk</th><th class="tr">Klr</th><th class="tr">Saldo</th></tr></thead><tbody>${rows.join('')}</tbody></table></div>`:`<div class="empty"><div class="empty-txt">Belum ada mutasi</div></div>`}`;
 }
