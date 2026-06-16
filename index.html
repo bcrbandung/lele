@@ -587,6 +587,8 @@ tr:last-child td{border-bottom:none;}
   </div>
 </div>
 
+<!-- html2canvas untuk screenshot invoice -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
 import { getDatabase, ref, set, onValue, get, remove, update } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
@@ -1413,6 +1415,16 @@ function renderPembeli(){
 // ======================== STRUK & INVOICE
 let currentStrukTx = null;
 
+function genNoInv(createdAt){
+  const d = createdAt ? new Date(createdAt) : new Date();
+  const yy = d.getFullYear();
+  const mm = String(d.getMonth()+1).padStart(2,'0');
+  const dd = String(d.getDate()).padStart(2,'0');
+  const hh = String(d.getHours()).padStart(2,'0');
+  const mi = String(d.getMinutes()).padStart(2,'0');
+  return 'INV-'+yy+mm+dd+hh+mi;
+}
+
 function getTxForStruk(txId){
   let tx = STATE.tx[txId];
   if(!tx) tx = Object.values(STATE.tx).find(t=>t.id===txId);
@@ -1422,44 +1434,41 @@ function getTxForStruk(txId){
 }
 
 function buildStrukText(tx){
-  const NAMA_TOKO   = 'BCR BANDUNG';
+  const NAMA_TOKO   = 'IZZAN FROZEN';
   const ALAMAT_TOKO = 'Bandung, Jawa Barat';
   const NO_WA       = '08xx-xxxx-xxxx';
-  const w = 32; // lebar struk 58mm ≈ 32 char
+  const w = 32;
   const line  = '─'.repeat(w);
-  const dline = '═'.repeat(w);
+  const dline = '━'.repeat(w);
   const center = (s) => { const p=Math.max(0,Math.floor((w-s.length)/2)); return ' '.repeat(p)+s; };
   const ljust  = (a,b,total) => { const sp=Math.max(1,total-a.length-b.length); return a+' '.repeat(sp)+b; };
 
   const items = tx.items||[];
   const total = tx.totalAsli||tx.total||0;
   const pihak = tx.pembeli||tx.toko||'-';
-  const metode = PAY_LABEL[tx.metodeBayar]||tx.metodeBayar||'Tunai';
   const isHutang = tx.metodeBayar==='hutang';
+  const metode = isHutang ? '----' : (PAY_LABEL[tx.metodeBayar]||tx.metodeBayar||'Tunai');
+  const noInv = genNoInv(tx.createdAt);
 
   let s = '';
-  s += center(NAMA_TOKO)+'\n';
-  s += center(ALAMAT_TOKO)+'\n';
-  s += center('WA: '+NO_WA)+'\n';
+  s += center('🐟 '+NAMA_TOKO)+'\n';
   s += dline+'\n';
-  s += ljust('No:', tx.id?tx.id.toUpperCase().substr(-8):'-', w)+'\n';
-  s += ljust('Tgl:', fmtD(tx.tanggal), w)+'\n';
-  s += ljust('Pembeli:', pihak, w)+'\n';
-  if(tx.kontak) s += ljust('Kontak:', tx.kontak, w)+'\n';
-  s += line+'\n';
+  s += ljust('No:', noInv, w)+'\n';
+  s += '📅 '+fmtD(tx.tanggal)+'\n';
+  s += '👤 '+pihak+(tx.kontak?' ('+tx.kontak+')':'')+'\n';
+  s += dline+'\n';
   items.forEach(i=>{
     const qty = i.qty||i.terjual||0;
-    const sub = fmt(qty*(i.harga||0));
-    s += (i.nama||i.prodId)+'\n';
-    s += ljust('  '+qty+' x '+fmt(i.harga||0), sub, w)+'\n';
+    s += '* '+(i.nama||i.prodId)+'\n';
+    s += ljust('  '+qty+' pcs × '+fmt(i.harga||0), fmt(qty*(i.harga||0)), w)+'\n';
   });
   s += dline+'\n';
-  s += ljust('TOTAL', fmt(total), w)+'\n';
-  s += ljust('Bayar', metode, w)+'\n';
-  if(isHutang) s += center('*** BELUM LUNAS ***')+'\n';
+  s += ljust('TOTAL:', fmt(total), w)+'\n';
+  s += '💳 Bayar: '+metode+'\n';
+  s += 'Status: '+(isHutang ? 'BELUM LUNAS' : 'LUNAS')+'\n';
   s += dline+'\n';
-  s += center('Terima kasih!')+'\n';
-  s += center('Produk segar & halal')+'\n';
+  s += center('Terima kasih! 🙏')+'\n';
+  s += center('Semoga Berkah dan Manfaat')+'\n';
   return s;
 }
 
@@ -1467,16 +1476,16 @@ function buildInvoiceHTML(tx){
   const items = tx.items||[];
   const total = tx.totalAsli||tx.total||0;
   const pihak = tx.pembeli||tx.toko||'-';
-  const metode = PAY_LABEL[tx.metodeBayar]||tx.metodeBayar||'Tunai';
   const isHutang = tx.metodeBayar==='hutang';
-  const noInv = 'INV-'+(tx.id?tx.id.toUpperCase().substr(-8):Date.now().toString(36).toUpperCase());
+  const metode = isHutang ? '----' : (PAY_LABEL[tx.metodeBayar]||tx.metodeBayar||'Tunai');
+  const noInv = genNoInv(tx.createdAt);
 
   return `
-  <div style="font-family:'Segoe UI',sans-serif;max-width:480px;margin:0 auto;">
+  <div style="font-family:'Segoe UI',sans-serif;max-width:480px;margin:0 auto;" id="invoice-content">
     <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:16px;">
       <div>
-        <div style="font-size:18px;font-weight:800;color:#0f4c35;">🐟 BCR Bandung</div>
-        <div style="font-size:11px;color:#6b7c74;">Produk Ikan Segar & Olahan</div>
+        <div style="font-size:18px;font-weight:800;color:#0f4c35;">🐟 IZZAN FROZEN</div>
+        <div style="font-size:11px;color:#6b7c74;">Bandung, Jawa Barat</div>
       </div>
       <div style="text-align:right;">
         <div style="font-size:13px;font-weight:700;">${noInv}</div>
@@ -1491,10 +1500,10 @@ function buildInvoiceHTML(tx){
     <table style="width:100%;border-collapse:collapse;font-size:12px;margin-bottom:12px;">
       <thead>
         <tr style="background:#0f4c35;color:white;">
-          <th style="padding:8px;text-align:left;border-radius:6px 0 0 0;">Produk</th>
+          <th style="padding:8px;text-align:left;">Produk</th>
           <th style="padding:8px;text-align:center;">Qty</th>
           <th style="padding:8px;text-align:right;">Harga</th>
-          <th style="padding:8px;text-align:right;border-radius:0 6px 0 0;">Subtotal</th>
+          <th style="padding:8px;text-align:right;">Subtotal</th>
         </tr>
       </thead>
       <tbody>
@@ -1516,9 +1525,12 @@ function buildInvoiceHTML(tx){
       <span style="color:#6b7c74;">Metode Pembayaran</span>
       <span style="font-weight:600;">${metode}</span>
     </div>
-    ${isHutang?`<div style="background:#fef2f2;border:1.5px solid #fecaca;border-radius:6px;padding:8px;text-align:center;font-size:12px;font-weight:700;color:#dc2626;margin-top:8px;">⚠️ BELUM LUNAS — Mohon segera dilunasi</div>`:''}
+    <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:8px;">
+      <span style="color:#6b7c74;">Status</span>
+      <span style="font-weight:700;color:${isHutang?'#dc2626':'#1a6b4a'};">${isHutang?'⚠️ BELUM LUNAS':'✅ LUNAS'}</span>
+    </div>
     <div style="text-align:center;margin-top:16px;font-size:11px;color:#6b7c74;border-top:1px dashed #e5e7eb;padding-top:12px;">
-      Terima kasih atas kepercayaan Anda 🙏<br>BCR Bandung · Produk segar & halal
+      Terima kasih! 🙏<br>Semoga Berkah dan Manfaat
     </div>
   </div>`;
 }
@@ -1527,11 +1539,11 @@ function buildWAText(tx){
   const items = tx.items||[];
   const total = tx.totalAsli||tx.total||0;
   const pihak = tx.pembeli||tx.toko||'-';
-  const metode = PAY_LABEL[tx.metodeBayar]||tx.metodeBayar||'Tunai';
   const isHutang = tx.metodeBayar==='hutang';
-  const noInv = 'INV-'+(tx.id?tx.id.toUpperCase().substr(-8):'-');
+  const metode = isHutang ? '----' : (PAY_LABEL[tx.metodeBayar]||tx.metodeBayar||'Tunai');
+  const noInv = genNoInv(tx.createdAt);
 
-  let t = `🐟 *BCR BANDUNG*\n`;
+  let t = `🐟 *IZZAN FROZEN*\n`;
   t += `━━━━━━━━━━━━━━━━━━\n`;
   t += `*${noInv}*\n`;
   t += `📅 ${fmtD(tx.tanggal)}\n`;
@@ -1539,14 +1551,14 @@ function buildWAText(tx){
   t += `━━━━━━━━━━━━━━━━━━\n`;
   items.forEach(i=>{
     const qty=i.qty||i.terjual||0;
-    t += `• ${i.nama||i.prodId}\n  ${qty} pcs × ${fmt(i.harga||0)} = *${fmt(qty*(i.harga||0))}*\n`;
+    t += `* ${i.nama||i.prodId}\n  ${qty} pcs × ${fmt(i.harga||0)} = *${fmt(qty*(i.harga||0))}*\n`;
   });
   t += `━━━━━━━━━━━━━━━━━━\n`;
   t += `*TOTAL: ${fmt(total)}*\n`;
   t += `💳 Bayar: ${metode}\n`;
-  if(isHutang) t += `⚠️ *BELUM LUNAS*\n`;
+  t += `Status: ${isHutang?'BELUM LUNAS':'LUNAS'}\n`;
   t += `━━━━━━━━━━━━━━━━━━\n`;
-  t += `Terima kasih! 🙏`;
+  t += `Terima kasih! 🙏\nSemoga Berkah dan Manfaat`;
   return t;
 }
 
@@ -1558,7 +1570,6 @@ window.printStruk = function(txId){
   const preview = document.getElementById('struk-preview');
   preview.textContent = buildStrukText(tx);
   document.getElementById('bt-status').textContent = '';
-  // Check bluetooth support
   const btBtn = document.getElementById('btn-bluetooth-print');
   if(!navigator.bluetooth){
     btBtn.disabled = true;
@@ -1590,14 +1601,10 @@ window.doPrintStruk = async function(){
   }
   btStatus.textContent = '🔍 Mencari printer...';
   try{
-    // Request Bluetooth device — filter printer thermal umum
     const device = await navigator.bluetooth.requestDevice({
       filters:[
-        {namePrefix:'MTP'},
-        {namePrefix:'RPP'},
-        {namePrefix:'BlueTooth Printer'},
-        {namePrefix:'Printer'},
-        {namePrefix:'POS'},
+        {namePrefix:'MTP'},{namePrefix:'RPP'},{namePrefix:'Printer'},
+        {namePrefix:'POS'},{namePrefix:'BlueTooth'},{namePrefix:'EPSON'},
       ],
       optionalServices:['000018f0-0000-1000-8000-00805f9b34fb']
     });
@@ -1605,70 +1612,67 @@ window.doPrintStruk = async function(){
     const server = await device.gatt.connect();
     const service = await server.getPrimaryService('000018f0-0000-1000-8000-00805f9b34fb');
     const characteristic = await service.getCharacteristic('00002af1-0000-1000-8000-00805f9b34fb');
-
-    // Encode struk ke bytes (ESC/POS)
     const text = buildStrukText(currentStrukTx);
     const encoder = new TextEncoder();
-    const ESC = 0x1B, GS = 0x1D;
-    // Init printer + center + bold header
-    const init = new Uint8Array([ESC,0x40]); // ESC @ = init
-    const cutPaper = new Uint8Array([GS,0x56,0x01]); // cut paper
+    const ESC=0x1B, GS=0x1D;
+    const init = new Uint8Array([ESC,0x40]);
+    const cut  = new Uint8Array([GS,0x56,0x01]);
     const textBytes = encoder.encode(text+'\n\n\n');
-    const fullBytes = new Uint8Array(init.length+textBytes.length+cutPaper.length);
-    fullBytes.set(init,0); fullBytes.set(textBytes,init.length); fullBytes.set(cutPaper,init.length+textBytes.length);
-
-    // Kirim per chunk 20 bytes (BLE limit)
-    const CHUNK = 20;
-    for(let i=0;i<fullBytes.length;i+=CHUNK){
-      await characteristic.writeValue(fullBytes.slice(i,i+CHUNK));
-    }
-    btStatus.innerHTML = '✅ <span style="color:var(--g3)">Struk berhasil dicetak!</span>';
+    const full = new Uint8Array(init.length+textBytes.length+cut.length);
+    full.set(init,0); full.set(textBytes,init.length); full.set(cut,init.length+textBytes.length);
+    const CHUNK=20;
+    for(let i=0;i<full.length;i+=CHUNK) await characteristic.writeValue(full.slice(i,i+CHUNK));
+    btStatus.innerHTML='✅ <span style="color:var(--g3)">Struk berhasil dicetak!</span>';
     device.gatt.disconnect();
   }catch(e){
-    if(e.name==='NotFoundError'){
-      btStatus.textContent = '❌ Printer tidak ditemukan / dibatalkan';
-    } else {
-      btStatus.textContent = '❌ Gagal: '+e.message;
-    }
+    btStatus.textContent = e.name==='NotFoundError'?'❌ Printer tidak ditemukan':'❌ Gagal: '+e.message;
   }
 };
 
 window.doPrintPDF = function(){
   if(!currentStrukTx) return;
-  // Buka jendela print dengan konten invoice
-  const invoiceHTML = buildInvoiceHTML(currentStrukTx);
   const win = window.open('','_blank','width=600,height=800');
-  win.document.write(`<!DOCTYPE html><html><head>
-    <meta charset="UTF-8">
-    <title>Invoice BCR Bandung</title>
-    <style>
-      body{font-family:'Segoe UI',sans-serif;padding:20px;max-width:480px;margin:0 auto;}
-      @media print{body{padding:0;}}
-      @page{margin:10mm;}
-    </style>
-  </head><body>${invoiceHTML}</body></html>`);
+  win.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Invoice IZZAN FROZEN</title>
+    <style>body{font-family:'Segoe UI',sans-serif;padding:20px;max-width:480px;margin:0 auto;}@media print{body{padding:0;}}@page{margin:10mm;}</style>
+  </head><body>${buildInvoiceHTML(currentStrukTx)}</body></html>`);
   win.document.close();
   setTimeout(()=>win.print(),500);
 };
 
-window.doShareWA = function(){
+window.doShareWA = async function(){
   if(!currentStrukTx) return;
   const text = buildWAText(currentStrukTx);
-  // Copy ke clipboard
-  if(navigator.clipboard){
-    navigator.clipboard.writeText(text).then(()=>{
-      // Coba buka WA langsung kalau ada nomor kontak
-      const noWA = currentStrukTx.kontak?currentStrukTx.kontak.replace(/[^0-9]/g,''):'';
-      if(noWA){
-        const waNum = noWA.startsWith('0') ? '62'+noWA.substr(1) : noWA;
-        window.open('https://wa.me/'+waNum+'?text='+encodeURIComponent(text),'_blank');
-      } else {
-        alert('✅ Teks invoice sudah di-copy!\nBuka WhatsApp dan paste ke chat pembeli.');
-      }
-    });
+  const noWA = currentStrukTx.kontak?(currentStrukTx.kontak.replace(/[^0-9]/g,'')):'' ;
+  const waNum = noWA ? (noWA.startsWith('0')?'62'+noWA.substr(1):noWA) : '';
+  const waURL = 'https://wa.me/'+(waNum||'')+'?text='+encodeURIComponent(text);
+
+  const fallback = async function(){
+    try{ if(navigator.clipboard) await navigator.clipboard.writeText(text); }catch(_){}
+    window.open(waURL,'_blank');
+  };
+
+  const el = document.getElementById('invoice-preview');
+  if(el && window.html2canvas){
+    try{
+      const canvas = await html2canvas(el,{scale:2,backgroundColor:'#ffffff'});
+      canvas.toBlob(async function(blob){
+        let shared = false;
+        if(blob && navigator.share && navigator.canShare){
+          const file = new File([blob],'invoice.png',{type:'image/png'});
+          if(navigator.canShare({files:[file]})){
+            try{
+              await navigator.share({files:[file],title:'Invoice IZZAN FROZEN',text:text});
+              shared = true;
+            }catch(e){ shared = false; }
+          }
+        }
+        if(!shared) await fallback();
+      },'image/png');
+    }catch(e){
+      await fallback();
+    }
   } else {
-    // Fallback: buka WA dengan teks
-    window.open('https://wa.me/?text='+encodeURIComponent(text),'_blank');
+    await fallback();
   }
 };
 function updateClock(){
