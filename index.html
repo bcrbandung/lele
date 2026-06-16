@@ -1435,7 +1435,7 @@ function getTxForStruk(txId){
 
 function buildStrukText(tx){
   const NAMA_TOKO   = 'IZZAN FROZEN';
-  const ALAMAT_TOKO = 'Bandung, Jawa Barat';
+  const ALAMAT_TOKO = 'Bogor, Jawa Barat';
   const NO_WA       = '08xx-xxxx-xxxx';
   const w = 32;
   const line  = '─'.repeat(w);
@@ -1465,7 +1465,7 @@ function buildStrukText(tx){
   s += dline+'\n';
   s += ljust('TOTAL:', fmt(total), w)+'\n';
   s += '💳 Bayar: '+metode+'\n';
-  s += 'Status: '+(isHutang ? 'BELUM LUNAS' : 'LUNAS')+'\n';
+  if(!isHutang) s += 'Status: LUNAS\n';
   s += dline+'\n';
   s += center('Terima kasih! 🙏')+'\n';
   s += center('Semoga Berkah dan Manfaat')+'\n';
@@ -1485,7 +1485,7 @@ function buildInvoiceHTML(tx){
     <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:16px;">
       <div>
         <div style="font-size:18px;font-weight:800;color:#0f4c35;">🐟 IZZAN FROZEN</div>
-        <div style="font-size:11px;color:#6b7c74;">Bandung, Jawa Barat</div>
+        <div style="font-size:11px;color:#6b7c74;">Bogor, Jawa Barat</div>
       </div>
       <div style="text-align:right;">
         <div style="font-size:13px;font-weight:700;">${noInv}</div>
@@ -1525,10 +1525,7 @@ function buildInvoiceHTML(tx){
       <span style="color:#6b7c74;">Metode Pembayaran</span>
       <span style="font-weight:600;">${metode}</span>
     </div>
-    <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:8px;">
-      <span style="color:#6b7c74;">Status</span>
-      <span style="font-weight:700;color:${isHutang?'#dc2626':'#1a6b4a'};">${isHutang?'⚠️ BELUM LUNAS':'✅ LUNAS'}</span>
-    </div>
+    ${!isHutang?`<div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:8px;"><span style="color:#6b7c74;">Status</span><span style="font-weight:700;color:#1a6b4a;">✅ LUNAS</span></div>`:''}
     <div style="text-align:center;margin-top:16px;font-size:11px;color:#6b7c74;border-top:1px dashed #e5e7eb;padding-top:12px;">
       Terima kasih! 🙏<br>Semoga Berkah dan Manfaat
     </div>
@@ -1556,7 +1553,7 @@ function buildWAText(tx){
   t += `━━━━━━━━━━━━━━━━━━\n`;
   t += `*TOTAL: ${fmt(total)}*\n`;
   t += `💳 Bayar: ${metode}\n`;
-  t += `Status: ${isHutang?'BELUM LUNAS':'LUNAS'}\n`;
+  if(!isHutang) t += `Status: LUNAS\n`;
   t += `━━━━━━━━━━━━━━━━━━\n`;
   t += `Terima kasih! 🙏\nSemoga Berkah dan Manfaat`;
   return t;
