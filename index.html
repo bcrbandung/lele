@@ -271,7 +271,9 @@ tr:last-child td{border-bottom:none;}
     <button class="tab" onclick="switchStok('konsinyasi')" id="stab-konsinyasi">🏪 Konsinyasi</button>
     <button class="tab" onclick="switchStok('kartu')" id="stab-kartu">📜 Kartu Stok</button>
   </div>
-  <div id="sv-gudang"><div class="card" style="padding:4px 12px;" id="list-gudang"></div></div>
+  <div id="sv-gudang"><div class="card" style="padding:4px 12px;" id="list-gudang"></div>
+    <button class="btn btn-outline btn-full" style="margin-top:4px;" onclick="openModal('mo-koreksi')">🔧 Koreksi / Opname Stok</button>
+  </div>
   <div id="sv-konsinyasi" style="display:none;"><div id="list-kon-aktif"></div></div>
   <div id="sv-kartu" style="display:none;">
     <div class="fg"><select class="fc" id="kartu-filter" onchange="renderKartu()"><option value="">— Pilih Produk —</option></select></div>
@@ -477,6 +479,23 @@ tr:last-child td{border-bottom:none;}
     </div>
     <div class="fg"><label class="fl">Tanggal Lunas</label><input type="date" class="fc" id="ln-tgl"></div>
     <button class="btn btn-primary btn-full" onclick="simpanLunas()">✅ Tandai Lunas</button>
+  </div>
+</div>
+
+<!-- MODAL KOREKSI STOK -->
+<div class="mo" id="mo-koreksi">
+  <div class="mo-box">
+    <div class="mo-hdr">
+      <div class="mo-title">🔧 Koreksi / Opname Stok</div>
+      <button class="mo-close" onclick="closeModal('mo-koreksi')">✕</button>
+    </div>
+    <div style="font-size:11px;color:var(--muted);margin-bottom:12px;">Isi stok aktual yang ada sekarang. Kosongkan jika tidak ingin mengubah.</div>
+    <div id="koreksi-items"></div>
+    <div class="fg">
+      <label class="fl">Keterangan Koreksi</label>
+      <input type="text" class="fc" id="koreksi-ket" placeholder="cth: opname harian, koreksi salah input">
+    </div>
+    <button class="btn btn-primary btn-full" onclick="simpanKoreksi()">💾 Simpan Koreksi</button>
   </div>
 </div>
 
@@ -709,11 +728,54 @@ function initModal(id){
     document.getElementById('r-detail').style.display='none';
     document.getElementById('r-tgl').value=today();
   }
-  if(id==='mo-pb'){['pb-nama','pb-hp','pb-alamat'].forEach(i=>document.getElementById(i).value='');}
+  if(id==='mo-koreksi'){
+    document.getElementById('koreksi-ket').value='';
+    const c=document.getElementById('koreksi-items');
+    c.innerHTML=PRODS.map(p=>`
+      <div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid #f0f5f2;">
+        <div style="font-size:20px;">${p.icon}</div>
+        <div style="flex:1;">
+          <div style="font-weight:600;font-size:12px;">${p.name}</div>
+          <div style="font-size:11px;color:var(--muted);">Stok saat ini: <b>${STATE.stok[p.id]||0}</b> pcs</div>
+        </div>
+        <input type="number" class="fc" id="kor-${p.id}" placeholder="—"
+          min="0" style="width:70px;text-align:center;padding:6px 8px;">
+      </div>`).join('');
+  }
 }
 
+// ======================== KOREKSI STOK
+async function simpanKoreksi(){
+  const ket = document.getElementById('koreksi-ket').value.trim()||'Koreksi stok';
+  const perubahan = [];
+  PRODS.forEach(p=>{
+    const input = document.getElementById('kor-'+p.id);
+    if(!input) return;
+    const val = input.value.trim();
+    if(val==='') return;
+    const stokBaru = parseInt(val);
+    if(isNaN(stokBaru)||stokBaru<0) return;
+    const stokLama = STATE.stok[p.id]||0;
+    if(stokBaru!==stokLama) perubahan.push({prodId:p.id,nama:p.name,stokLama,stokBaru,selisih:stokBaru-stokLama});
+  });
+  if(!perubahan.length){ alert('Tidak ada perubahan stok.'); return; }
+  const detail = perubahan.map(p=>`${p.nama}: ${p.stokLama} → ${p.stokBaru} (${p.selisih>0?'+':''}${p.selisih})`).join('\n');
+  if(!confirm(`Konfirmasi koreksi:\n\n${detail}\n\nLanjutkan?`)) return;
+  setSyncStatus('syncing');
+  try{
+    const id=genId();
+    const items=perubahan.map(p=>({prodId:p.prodId,nama:p.nama,qty:Math.abs(p.selisih),stokLama:p.stokLama,stokBaru:p.stokBaru,selisih:p.selisih}));
+    const tx={id,tipe:'koreksi',tanggal:today(),keterangan:ket,items,total:0,createdAt:new Date().toISOString()};
+    const writes=[set(ref(db,`tx/${id}`),tx)];
+    perubahan.forEach(p=>writes.push(set(ref(db,`stok/${p.prodId}`),p.stokBaru)));
+    await Promise.all(writes);
+    setSyncStatus(''); closeModal('mo-koreksi');
+    alert(`✅ Koreksi stok berhasil!\n\n${detail}`);
+  }catch(e){setSyncStatus('offline');alert('Gagal: '+e.message);}
+}
+window.simpanKoreksi=simpanKoreksi;
+
 function addRow(cid,type){
-  const c=document.getElementById(cid);
   const div=document.createElement('div'); div.className='item-row';
   const isCalc=type==='jual'||type==='booking';
   const cb=isCalc?' onchange="'+(type==='jual'?'calcJual':'calcBooking')+'()"':'';
