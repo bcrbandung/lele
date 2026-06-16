@@ -608,6 +608,49 @@ tr:last-child td{border-bottom:none;}
 
 <!-- html2canvas untuk screenshot invoice -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+
+<!-- Stub global functions — akan di-override oleh module setelah load -->
+<script>
+function openModal(id){ var el=document.getElementById(id); if(el) el.classList.add('open'); }
+function closeModal(id){ var el=document.getElementById(id); if(el) el.classList.remove('open'); }
+function goPage(p){ /* stub */ }
+function selectPay(el,g){ document.querySelectorAll('#'+g+' .pay-pill').forEach(function(x){x.classList.remove('active');}); el.classList.add('active'); }
+function calcJual(){}
+function calcBooking(){}
+function calcRekon(){}
+function calcEdit(){}
+function loadRekon(){}
+function renderKartu(){}
+function filterTx(t,el){ document.querySelectorAll('#filter-pills .pill').forEach(function(p){p.classList.remove('active');}); el.classList.add('active'); }
+function filterPiutang(f,el){ document.querySelectorAll('#lv-piutang .pill').forEach(function(p){p.classList.remove('active');}); el.classList.add('active'); }
+function switchStok(t){ }
+function switchLap(t){ }
+function switchBooking(t){ }
+function addRow(c,t){ }
+function simpanJual(){ alert('Mohon tunggu, aplikasi sedang loading...'); }
+function simpanMasuk(){ alert('Mohon tunggu, aplikasi sedang loading...'); }
+function simpanBooking(){ alert('Mohon tunggu, aplikasi sedang loading...'); }
+function simpanKon(){ alert('Mohon tunggu, aplikasi sedang loading...'); }
+function simpanRekon(){ alert('Mohon tunggu, aplikasi sedang loading...'); }
+function simpanPb(){ alert('Mohon tunggu, aplikasi sedang loading...'); }
+function simpanEdit(){ alert('Mohon tunggu, aplikasi sedang loading...'); }
+function hapusTx(){ alert('Mohon tunggu, aplikasi sedang loading...'); }
+function simpanKoreksi(){ alert('Mohon tunggu, aplikasi sedang loading...'); }
+function approveBooking(){}
+function openApprove(id){}
+function batalBooking(id){}
+function openRekonFor(id){}
+function openDetailTx(id){}
+function openEditTx(id){}
+function openLunas(id){}
+function simpanLunas(){}
+function doPrintStruk(){}
+function doPrintPDF(){}
+function doShareWA(){}
+function printStruk(id){}
+function shareInvoiceWA(id){}
+</script>
+
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
 import { getDatabase, ref, set, onValue, get, remove, update } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
@@ -681,7 +724,10 @@ function renderPage(pid){
 }
 
 // ======================== MODAL
-function openModal(id){ initModal(id); document.getElementById(id).classList.add('open'); }
+function openModal(id){
+  try{ initModal(id); }catch(e){ console.error('initModal error:',e); }
+  document.getElementById(id).classList.add('open');
+}
 function closeModal(id){ document.getElementById(id).classList.remove('open'); }
 window.openModal=openModal; window.closeModal=closeModal;
 document.querySelectorAll('.mo').forEach(el=>el.addEventListener('click',e=>{ if(e.target===el) el.classList.remove('open'); }));
