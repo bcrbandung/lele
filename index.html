@@ -1426,10 +1426,10 @@ window.simpanPb=simpanPb;
 // ======================== RENDER BERANDA
 function renderBeranda(){
   const now=new Date(), ts=now.toISOString().substr(0,10), mo=now.getMonth(), yr=now.getFullYear();
-  const txArr=getTxArray();
-  const todayTx=txArr.filter(t=>t.tanggal===ts&&(t.tipe==='penjualan'||t.tipe==='rekonsiliasi'||t.tipe==='pelunasan')&&t.total>0);
-  document.getElementById('kpi-kas').textContent=fmt(todayTx.reduce((s,t)=>s+(t.total||0),0));
-  document.getElementById('kpi-kas-sub').textContent=todayTx.length+' transaksi';
+  const incomes = getIncomeTx();
+  const todayIncome = incomes.filter(t=>t.tanggalEfektif===ts);
+  document.getElementById('kpi-kas').textContent=fmt(todayIncome.reduce((s,t)=>s+(t.totalEfektif||0),0));
+  document.getElementById('kpi-kas-sub').textContent=todayIncome.length+' transaksi';
 
   let ts2=0,tp=0; PRODS.forEach(p=>{const q=STATE.stok[p.id]||0;ts2+=q;if(q>0)tp++;});
   document.getElementById('kpi-stok').textContent=ts2+' pcs';
@@ -1447,12 +1447,13 @@ function renderBeranda(){
   document.getElementById('kpi-kon').textContent=kq+' pcs';
   document.getElementById('kpi-kon-sub').textContent=kt+' titipan';
 
-  const moTx=txArr.filter(t=>{const d=new Date(t.tanggal);return d.getMonth()===mo&&d.getFullYear()===yr&&(t.tipe==='penjualan'||t.tipe==='rekonsiliasi'||t.tipe==='pelunasan')&&t.total>0;});
-  document.getElementById('kpi-omset').textContent=fmt(moTx.reduce((s,t)=>s+(t.total||0),0));
+  const moIncome = incomes.filter(t=>{const d=new Date(t.tanggalEfektif);return d.getMonth()===mo&&d.getFullYear()===yr;});
+  document.getElementById('kpi-omset').textContent=fmt(moIncome.reduce((s,t)=>s+(t.totalEfektif||0),0));
   document.getElementById('kpi-omset-sub').textContent=now.toLocaleDateString('id-ID',{month:'short',year:'numeric'});
 
+  const recent=getTxArray().slice(0,6);
   const c=document.getElementById('recent-tx');
-  c.innerHTML=txArr.slice(0,6).map(txRow).join('')||`<div class="empty"><div class="empty-icon">📭</div><div class="empty-txt">Belum ada transaksi</div></div>`;
+  c.innerHTML=recent.length?recent.map(txRow).join(''):`<div class="empty"><div class="empty-icon">📭</div><div class="empty-txt">Belum ada transaksi</div></div>`;
 }
 
 function txRow(tx){
@@ -1758,7 +1759,90 @@ function switchLap(tab, silent=false){
 }
 window.switchLap=switchLap;
 
-// ======================== KAS TRACKING
+// ======================== MASTER INCOME CALCULATOR
+// Satu sumber kebenaran untuk semua perhitungan pemasukan
+// Aturan:
+// 1. Hutang belum lunas = TIDAK dihitung (total=0 di TX)
+// 2. Hutang sudah lunas = dihitung dengan metode bayar aktual dari node piutang
+// 3. Konsinyasi = TIDAK dihitung (total=0, hanya pencatatan stok keluar)
+// 4. Rekonsiliasi konsinyasi = dihitung (ini yang beneran jadi uang)
+// 5. Pelunasan = dihitung (pembayaran hutang masuk)
+// 6. Penjualan langsung (bukan hutang) = dihitung
+// 7. Booking = TIDAK double count (approve booking buat TX penjualan baru)
+
+function getIncomeTx(){
+  // Buat map piutang by txId untuk lookup cepat
+  const piutangByTxId = {};
+  getPiutangArray().forEach(p=>{ if(p.txId) piutangByTxId[p.txId] = p; });
+
+  const result = [];
+  getTxArray().forEach(tx=>{
+    // Skip konsinyasi (stok keluar, belum uang)
+    if(tx.tipe==='konsinyasi') return;
+    // Skip pembelian, retur, koreksi
+    if(tx.tipe==='pembelian'||tx.tipe==='retur'||tx.tipe==='koreksi') return;
+    // Skip booking (bukan transaksi uang, hanya reservasi)
+    // Approve booking akan buat TX penjualan baru
+
+    if(tx.tipe==='penjualan'){
+      const piutang = piutangByTxId[tx.id];
+      if(tx.metodeBayar==='hutang'){
+        // Hutang: hanya masuk kalau sudah lunas, pakai tanggal & metode pelunasan
+        if(piutang && piutang.status==='lunas'){
+          result.push({
+            ...tx,
+            tanggalEfektif: piutang.tanggalLunas||tx.tanggal,
+            metodeBayarEfektif: piutang.metodeBayarLunas||'tunai',
+            totalEfektif: tx.totalAsli||tx.total||0,
+            sumber: 'hutang-lunas'
+          });
+        }
+        // Belum lunas = skip
+      } else {
+        // Bayar langsung
+        result.push({
+          ...tx,
+          tanggalEfektif: tx.tanggal,
+          metodeBayarEfektif: tx.metodeBayar||'tunai',
+          totalEfektif: tx.totalAsli||tx.total||0,
+          sumber: 'langsung'
+        });
+      }
+    }
+
+    if(tx.tipe==='rekonsiliasi'){
+      // Rekonsiliasi konsinyasi = uang masuk dari toko
+      result.push({
+        ...tx,
+        tanggalEfektif: tx.tanggal,
+        metodeBayarEfektif: tx.metodeBayar||'tunai',
+        totalEfektif: tx.total||0,
+        sumber: 'konsinyasi-rekon'
+      });
+    }
+
+    // Pelunasan hutang sudah ditangani via penjualan+piutang di atas
+    // TX tipe pelunasan tidak perlu di-count lagi (double count)
+  });
+
+  return result;
+}
+
+// Helper: filter income by tanggal efektif
+function getIncomeByDate(tgl){
+  return getIncomeTx().filter(t=>t.tanggalEfektif===tgl);
+}
+
+// Helper: hitung total per metode dari income
+function sumByMetode(incomes){
+  const r = {qris:0, tunai:0, transfer:0, others:0};
+  incomes.forEach(t=>{
+    const m = t.metodeBayarEfektif||'tunai';
+    if(r[m]!==undefined) r[m]+=t.totalEfektif||0;
+    else r['others']+=t.totalEfektif||0;
+  });
+  return r;
+}
 const QRIS_FEE = 0.007;
 const METODE_LABEL = {qris:'📱 QRIS', tunai:'💵 Tunai', transfer:'🏦 Transfer', others:'💳 Lainnya'};
 let kasHistoryFilter = 'semua';
@@ -1766,12 +1850,12 @@ let kasHistoryFilter = 'semua';
 function getSetoranArray(){ return Object.values(STATE.setoran||{}).sort((a,b)=>new Date(b.createdAt)-new Date(a.createdAt)); }
 
 function hitungSaldoKas(){
-  // Hitung total pemasukan per metode dari semua transaksi
+  // Hitung total pemasukan per metode dari getIncomeTx (sudah normalized)
   const pemasukan = {qris:0, tunai:0, transfer:0, others:0};
-  getTxArray().filter(t=>(t.tipe==='penjualan'||t.tipe==='rekonsiliasi'||t.tipe==='pelunasan')&&t.total>0).forEach(tx=>{
-    const m = tx.metodeBayar||'tunai';
-    if(pemasukan[m]!==undefined) pemasukan[m]+=tx.total;
-    else pemasukan['others']+=tx.total;
+  getIncomeTx().forEach(t=>{
+    const m = t.metodeBayarEfektif||'tunai';
+    if(pemasukan[m]!==undefined) pemasukan[m]+=t.totalEfektif||0;
+    else pemasukan['others']+=t.totalEfektif||0;
   });
 
   // Hitung total setoran per metode
@@ -1968,9 +2052,10 @@ function renderPiutang(){
 
 function renderHarian(){
   const byDate={};
-  getTxArray().filter(t=>(t.tipe==='penjualan'||t.tipe==='rekonsiliasi'||t.tipe==='pelunasan')&&t.total>0).forEach(t=>{
-    if(!byDate[t.tanggal]) byDate[t.tanggal]={total:0,count:0};
-    byDate[t.tanggal].total+=t.total||0; byDate[t.tanggal].count++;
+  getIncomeTx().forEach(t=>{
+    const tgl = t.tanggalEfektif;
+    if(!byDate[tgl]) byDate[tgl]={total:0,count:0};
+    byDate[tgl].total+=t.totalEfektif||0; byDate[tgl].count++;
   });
   const dates=Object.keys(byDate).sort().reverse();
   document.getElementById('list-harian').innerHTML=dates.length?dates.map(d=>`<div class="har-row"><div><div class="har-date">${fmtD(d)}</div><div class="har-sub">${byDate[d].count} transaksi</div></div><div class="har-amt">${fmt(byDate[d].total)}</div></div>`).join(''):`<div class="empty"><div class="empty-icon">📅</div><div class="empty-txt">Belum ada data</div></div>`;
@@ -1978,8 +2063,13 @@ function renderHarian(){
 
 function renderPerProduk(){
   const bp={};
-  getTxArray().filter(t=>t.tipe==='penjualan'||t.tipe==='rekonsiliasi').forEach(t=>{
-    if(t.items) t.items.forEach(i=>{if(!bp[i.prodId])bp[i.prodId]={qty:0,total:0,nama:i.nama};const q=i.qty||i.terjual||0;bp[i.prodId].qty+=q;bp[i.prodId].total+=q*(i.harga||0);});
+  getIncomeTx().forEach(t=>{
+    if(t.items) t.items.forEach(i=>{
+      if(!bp[i.prodId]) bp[i.prodId]={qty:0,total:0,nama:i.nama};
+      const q=i.qty||i.terjual||0;
+      bp[i.prodId].qty+=q;
+      bp[i.prodId].total+=q*(i.harga||0);
+    });
   });
   const sorted=Object.entries(bp).sort((a,b)=>b[1].total-a[1].total);
   const c=document.getElementById('list-produk');
@@ -2010,9 +2100,9 @@ function renderPembeli(){
     </div>
     <div class="card" style="padding:4px 12px;">` +
     pb.map(p=>{
-      const txList = getTxArray().filter(t=>t.pembeli&&t.pembeli.toLowerCase().trim()===p.nama.toLowerCase().trim()&&(t.tipe==='penjualan'||t.tipe==='rekonsiliasi'||t.tipe==='pelunasan')&&t.total>0);
-      const tot = txList.reduce((s,t)=>s+(t.total||0),0);
-      const txCount = txList.length;
+      const incomes = getIncomeTx().filter(t=>(t.pembeli||'').toLowerCase().trim()===p.nama.toLowerCase().trim());
+      const tot = incomes.reduce((s,t)=>s+(t.totalEfektif||0),0);
+      const txCount = incomes.length;
       const hutang = getPiutangArray().filter(h=>h.pembeli&&h.pembeli.toLowerCase().trim()===p.nama.toLowerCase().trim()&&h.status==='belum').reduce((s,h)=>s+h.total,0);
       const pbKey = Object.keys(STATE.pembeli).find(k=>STATE.pembeli[k].id===p.id||k===p.id)||p.id;
       return `<div class="sk-item">
