@@ -1397,13 +1397,21 @@ async function simpanLunas(){
   const tgl=document.getElementById('ln-tgl').value;
   setSyncStatus('syncing');
   try{
-    const txId=genId();
-    const tx={id:txId,tipe:'pelunasan',tanggal:tgl,pembeli:p.pembeli,total:p.total,metodeBayar,piutangId:currentLunasId,createdAt:new Date().toISOString()};
-    await Promise.all([
-      set(ref(db,`tx/${txId}`),tx),
-      update(ref(db,`piutang/${currentLunasId}`),{status:'lunas',tanggalLunas:tgl,metodeBayarLunas:metodeBayar}),
-      update(ref(db,`tx/${p.txId}`),{total:p.total,status:'lunas'})
-    ]);
+    const writes = [
+      // Update node piutang
+      update(ref(db,`piutang/${currentLunasId}`),{
+        status:'lunas', tanggalLunas:tgl, metodeBayarLunas:metodeBayar
+      }),
+      // Update TX asli: ubah metodeBayar, total, status, tanggal efektif
+      update(ref(db,`tx/${p.txId}`),{
+        total: p.total,
+        totalAsli: p.total,
+        status: 'lunas',
+        metodeBayar: metodeBayar,
+        tanggalLunas: tgl
+      })
+    ];
+    await Promise.all(writes);
     setSyncStatus(''); closeModal('mo-lunas');
     alert(`✅ Hutang ${p.pembeli} lunas!\n${fmt(p.total)}\nMetode: ${PAY_LABEL[metodeBayar]}`);
   }catch(e){setSyncStatus('offline');alert('Gagal: '+e.message);}
@@ -1457,15 +1465,28 @@ function renderBeranda(){
 }
 
 function txRow(tx){
-  const icons={penjualan:'🛒',pembelian:'📥',retur:'↩️',konsinyasi:'🏪',rekonsiliasi:'✅',pelunasan:'💳'};
-  const dots={penjualan:'td-jual',pembelian:'td-beli',retur:'td-retur',konsinyasi:'td-kon',rekonsiliasi:'td-rekon',pelunasan:'td-lunas'};
-  const labels={penjualan:'Jual',pembelian:'Beli',retur:'Retur',konsinyasi:'Konsinyasi',rekonsiliasi:'Rekon',pelunasan:'Pelunasan'};
+  const icons={penjualan:'🛒',pembelian:'📥',retur:'↩️',konsinyasi:'🏪',rekonsiliasi:'✅',pelunasan:'💳',koreksi:'🔧'};
+  const dots={penjualan:'td-jual',pembelian:'td-beli',retur:'td-retur',konsinyasi:'td-kon',rekonsiliasi:'td-rekon',pelunasan:'td-lunas',koreksi:'td-beli'};
+  const labels={penjualan:'Jual',pembelian:'Beli',retur:'Retur',konsinyasi:'Konsinyasi',rekonsiliasi:'Rekon',pelunasan:'Pelunasan',koreksi:'Koreksi'};
   const pihak=tx.pembeli||tx.supplier||tx.toko||'-';
-  const isPlus=tx.tipe==='penjualan'||tx.tipe==='rekonsiliasi'||tx.tipe==='pelunasan';
+  const isHutangBelumLunas = tx.metodeBayar==='hutang' && tx.status!=='lunas';
+  const isPlus = (tx.tipe==='penjualan'&&!isHutangBelumLunas)||tx.tipe==='rekonsiliasi'||tx.tipe==='pelunasan';
   const totalQty=tx.items?tx.items.reduce((s,i)=>s+(i.qty||i.terjual||0),0):0;
-  const payBadge=tx.metodeBayar&&tx.metodeBayar!=='tunai'?` · <span class="badge ${tx.metodeBayar==='hutang'?'bg-red':'bg-blue'}">${PAY_LABEL[tx.metodeBayar]||tx.metodeBayar}</span>`:'';
-  const txId=tx.id||tx._key||'';
-  return `<div class="tx-item" onclick="openDetailTx('${txId}')"><div class="tx-dot ${dots[tx.tipe]||'td-jual'}">${icons[tx.tipe]||'📝'}</div><div class="tx-body"><div class="tx-name">${labels[tx.tipe]} · ${pihak}${payBadge}</div><div class="tx-meta">${fmtD(tx.tanggal)}${totalQty?' · '+totalQty+' pcs':''}</div></div><div class="tx-amt ${isPlus?'plus':tx.tipe==='konsinyasi'?'neutral':'minus'}">${isPlus?'+':''}${tx.total?fmt(Math.abs(tx.total)):'—'}</div></div>`;
+  // Tampilkan metode yang sesungguhnya
+  const metodeDisplay = tx.metodeBayar==='hutang' && tx.status!=='lunas'
+    ? `<span class="badge bg-red">📒 Hutang</span>`
+    : tx.metodeBayar&&tx.metodeBayar!=='tunai'
+      ? `<span class="badge bg-blue">${PAY_LABEL[tx.metodeBayar]||tx.metodeBayar}</span>`
+      : '';
+  const totalDisplay = isHutangBelumLunas ? `<span style="color:var(--muted);font-size:11px;">Belum lunas</span>` : (isPlus?'+':'')+fmt(Math.abs(tx.totalAsli||tx.total||0));
+  return `<div class="tx-item" onclick="openDetailTx('${tx.id||tx._key||''}')">
+    <div class="tx-dot ${dots[tx.tipe]||'td-jual'}">${icons[tx.tipe]||'📝'}</div>
+    <div class="tx-body">
+      <div class="tx-name">${labels[tx.tipe]||tx.tipe} · ${pihak}${metodeDisplay?' · '+metodeDisplay:''}</div>
+      <div class="tx-meta">${fmtD(tx.tanggal)}${totalQty?' · '+totalQty+' pcs':''}${tx.tanggalLunas?' · Lunas '+fmtD(tx.tanggalLunas):''}</div>
+    </div>
+    <div class="tx-amt ${isPlus?'plus':isHutangBelumLunas?'neutral':'minus'}">${totalDisplay}</div>
+  </div>`;
 }
 
 // ======================== DETAIL & EDIT TX
@@ -1785,29 +1806,19 @@ function getIncomeTx(){
     // Approve booking akan buat TX penjualan baru
 
     if(tx.tipe==='penjualan'){
-      const piutang = piutangByTxId[tx.id];
       if(tx.metodeBayar==='hutang'){
-        // Hutang: hanya masuk kalau sudah lunas, pakai tanggal & metode pelunasan
-        if(piutang && piutang.status==='lunas'){
-          result.push({
-            ...tx,
-            tanggalEfektif: piutang.tanggalLunas||tx.tanggal,
-            metodeBayarEfektif: piutang.metodeBayarLunas||'tunai',
-            totalEfektif: tx.totalAsli||tx.total||0,
-            sumber: 'hutang-lunas'
-          });
-        }
-        // Belum lunas = skip
-      } else {
-        // Bayar langsung
-        result.push({
-          ...tx,
-          tanggalEfektif: tx.tanggal,
-          metodeBayarEfektif: tx.metodeBayar||'tunai',
-          totalEfektif: tx.totalAsli||tx.total||0,
-          sumber: 'langsung'
-        });
+        // Masih hutang belum lunas — skip
+        return;
       }
+      // Sudah lunas atau bayar langsung
+      // Kalau punya tanggalLunas, pakai itu sebagai tanggal efektif
+      result.push({
+        ...tx,
+        tanggalEfektif: tx.tanggalLunas||tx.tanggal,
+        metodeBayarEfektif: tx.metodeBayar||'tunai',
+        totalEfektif: tx.totalAsli||tx.total||0,
+        sumber: tx.tanggalLunas?'hutang-lunas':'langsung'
+      });
     }
 
     if(tx.tipe==='rekonsiliasi'){
