@@ -377,6 +377,7 @@ tr:last-child td{border-bottom:none;}
     <button class="tab" onclick="switchLap('piutang')" id="ltab-piutang">💳 Piutang</button>
     <button class="tab" onclick="switchLap('harian')" id="ltab-harian">Harian</button>
     <button class="tab" onclick="switchLap('produk')" id="ltab-produk">Produk</button>
+    <button class="tab" onclick="switchLap('rekon-kas')" id="ltab-rekon-kas">🏦 Kas</button>
   </div>
   <div id="lv-transaksi">
     <div class="pills" id="filter-pills">
@@ -400,6 +401,55 @@ tr:last-child td{border-bottom:none;}
   </div>
   <div id="lv-harian" style="display:none;"><div id="list-harian"></div></div>
   <div id="lv-produk" style="display:none;"><div id="list-produk"></div></div>
+  <div id="lv-rekon-kas" style="display:none;">
+    <div class="tabs" style="margin-bottom:10px;">
+      <button class="tab active" onclick="switchKasTab('saldo')" id="kastab-saldo">💰 Saldo</button>
+      <button class="tab" onclick="switchKasTab('setor')" id="kastab-setor">📥 Catat Setoran</button>
+      <button class="tab" onclick="switchKasTab('history')" id="kastab-history">📋 History</button>
+    </div>
+    <div id="kas-saldo">
+      <div id="kas-saldo-content"></div>
+    </div>
+    <div id="kas-setor" style="display:none;">
+      <div class="card mb8">
+        <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:12px;">📥 Catat Setoran ke Rekening</div>
+        <div class="fg">
+          <label class="fl">Tanggal Setoran</label>
+          <input type="date" class="fc" id="setor-tgl">
+        </div>
+        <div class="fg">
+          <label class="fl">Metode</label>
+          <select class="fc" id="setor-metode" onchange="updateSetorInfo()">
+            <option value="qris">📱 QRIS</option>
+            <option value="tunai">💵 Tunai</option>
+            <option value="transfer">🏦 Transfer</option>
+            <option value="others">💳 Lainnya</option>
+          </select>
+        </div>
+        <div id="setor-info" style="background:var(--gpale);border-radius:8px;padding:10px 12px;margin-bottom:12px;font-size:12px;"></div>
+        <div class="fg">
+          <label class="fl">Jumlah Masuk ke Rekening (aktual)</label>
+          <div class="input-group"><div class="ia">Rp</div><input type="number" class="fc" id="setor-jumlah" placeholder="0" oninput="updateSetorSelisih()"></div>
+        </div>
+        <div id="setor-selisih" style="margin-bottom:10px;"></div>
+        <div class="fg">
+          <label class="fl">Keterangan (opsional)</label>
+          <input type="text" class="fc" id="setor-ket" placeholder="cth: transfer BCA, ambil tunai">
+        </div>
+        <button class="btn btn-primary btn-full" onclick="simpanSetoran()">💾 Simpan Setoran</button>
+      </div>
+    </div>
+    <div id="kas-history" style="display:none;">
+      <div class="pills">
+        <button class="pill active" onclick="filterKasHistory('semua',this)">Semua</button>
+        <button class="pill" onclick="filterKasHistory('qris',this)">📱 QRIS</button>
+        <button class="pill" onclick="filterKasHistory('tunai',this)">💵 Tunai</button>
+        <button class="pill" onclick="filterKasHistory('transfer',this)">🏦 Transfer</button>
+        <button class="pill" onclick="filterKasHistory('others',this)">💳 Lainnya</button>
+      </div>
+      <div id="kas-history-content"></div>
+    </div>
+  </div>
 </div>
 
 <!-- PAGE PEMBELI -->
@@ -754,6 +804,13 @@ var openRekonFor = function(id){};
 var openDetailTx = function(id){};
 var openEditTx = function(id){};
 var openLunas = function(id){};
+var switchKasTab = function(t){};
+var updateSetorInfo = function(){};
+var updateSetorSelisih = function(){};
+var simpanSetoran = _loading;
+var filterKasHistory = function(f,el){};
+var renderKasHistory = function(){};
+var renderKasSaldo = function(){};
 var simpanLunas = function(){};
 var openEditPb = function(id){};
 var simpanEditPb = function(){};
@@ -793,7 +850,7 @@ const PRODS = [
   {id:'TP', name:'Tahu Pananya',             price:13000, icon:'🟨', allowZeroStock:true},
 ];
 
-let STATE = {tx:{}, konsinyasi:{}, pembeli:{}, stok:{}, stokKon:{}, booking:{}, piutang:{}};
+let STATE = {tx:{}, konsinyasi:{}, pembeli:{}, stok:{}, stokKon:{}, booking:{}, piutang:{}, setoran:{}};
 let currentApproveId = null;
 let currentLunasId   = null;
 
@@ -1685,10 +1742,199 @@ function renderBookingList(){
 // ======================== LAPORAN
 let txFilter='semua', piutangFilter='semua';
 function switchLap(tab, silent=false){
-  ['transaksi','piutang','harian','produk'].forEach(t=>{document.getElementById('lv-'+t).style.display=t===tab?'block':'none';document.getElementById('ltab-'+t).classList.toggle('active',t===tab);});
-  if(!silent){if(tab==='harian')renderHarian();if(tab==='produk')renderPerProduk();if(tab==='piutang')renderPiutang();if(tab==='transaksi')renderTxList();}
+  ['transaksi','piutang','harian','produk','rekon-kas'].forEach(t=>{
+    var el=document.getElementById('lv-'+t);
+    var btn=document.getElementById('ltab-'+t);
+    if(el) el.style.display=t===tab?'block':'none';
+    if(btn) btn.classList.toggle('active',t===tab);
+  });
+  if(!silent){
+    if(tab==='harian') renderHarian();
+    if(tab==='produk') renderPerProduk();
+    if(tab==='piutang') renderPiutang();
+    if(tab==='transaksi') renderTxList();
+    if(tab==='rekon-kas'){ renderKasSaldo(); }
+  }
 }
 window.switchLap=switchLap;
+
+// ======================== KAS TRACKING
+const QRIS_FEE = 0.007;
+const METODE_LABEL = {qris:'📱 QRIS', tunai:'💵 Tunai', transfer:'🏦 Transfer', others:'💳 Lainnya'};
+let kasHistoryFilter = 'semua';
+
+function getSetoranArray(){ return Object.values(STATE.setoran||{}).sort((a,b)=>new Date(b.createdAt)-new Date(a.createdAt)); }
+
+function hitungSaldoKas(){
+  // Hitung total pemasukan per metode dari semua transaksi
+  const pemasukan = {qris:0, tunai:0, transfer:0, others:0};
+  getTxArray().filter(t=>(t.tipe==='penjualan'||t.tipe==='rekonsiliasi'||t.tipe==='pelunasan')&&t.total>0).forEach(tx=>{
+    const m = tx.metodeBayar||'tunai';
+    if(pemasukan[m]!==undefined) pemasukan[m]+=tx.total;
+    else pemasukan['others']+=tx.total;
+  });
+
+  // Hitung total setoran per metode
+  const setor = {qris:0, tunai:0, transfer:0, others:0};
+  getSetoranArray().forEach(s=>{
+    const m = s.metode||'tunai';
+    if(setor[m]!==undefined) setor[m]+=s.jumlahAktual||0;
+    else setor['others']+=s.jumlahAktual||0;
+  });
+
+  // Hitung saldo belum disetor (bersih setelah fee)
+  const saldo = {};
+  ['qris','tunai','transfer','others'].forEach(m=>{
+    const bersih = m==='qris' ? Math.round(pemasukan[m]*(1-QRIS_FEE)) : pemasukan[m];
+    saldo[m] = { kotor:pemasukan[m], bersih, sudahSetor:setor[m], belumSetor: Math.max(0, bersih-setor[m]), fee: m==='qris'?Math.round(pemasukan[m]*QRIS_FEE):0 };
+  });
+  return saldo;
+}
+
+function switchKasTab(tab){
+  ['saldo','setor','history'].forEach(t=>{
+    document.getElementById('kas-'+t).style.display=t===tab?'block':'none';
+    document.getElementById('kastab-'+t).classList.toggle('active',t===tab);
+  });
+  if(tab==='saldo') renderKasSaldo();
+  if(tab==='setor') initSetorForm();
+  if(tab==='history') renderKasHistory();
+}
+window.switchKasTab=switchKasTab;
+
+function renderKasSaldo(){
+  const saldo = hitungSaldoKas();
+  const c = document.getElementById('kas-saldo-content');
+  const totalBelum = Object.values(saldo).reduce((s,v)=>s+v.belumSetor,0);
+  const totalSudah = Object.values(saldo).reduce((s,v)=>s+v.sudahSetor,0);
+
+  c.innerHTML = `
+    <div style="background:var(--g2);color:white;border-radius:var(--r);padding:14px 16px;margin-bottom:10px;">
+      <div style="font-size:11px;opacity:0.7;margin-bottom:4px;">TOTAL BELUM DISETOR</div>
+      <div style="font-size:26px;font-weight:800;letter-spacing:-1px;">${fmt(totalBelum)}</div>
+      <div style="font-size:11px;opacity:0.6;margin-top:4px;">Sudah disetor: ${fmt(totalSudah)}</div>
+    </div>` +
+    ['qris','tunai','transfer','others'].map(m=>{
+      const s = saldo[m];
+      if(s.kotor===0) return '';
+      return `<div class="card mb8">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+          <div style="font-weight:700;font-size:14px;">${METODE_LABEL[m]}</div>
+          <span class="badge ${s.belumSetor>0?'bg-amber':'bg-green'}">${s.belumSetor>0?'Belum disetor':'Lunas'}</span>
+        </div>
+        <div style="font-size:12px;">
+          <div style="display:flex;justify-content:space-between;padding:4px 0;color:var(--muted);"><span>Total penjualan</span><span>${fmt(s.kotor)}</span></div>
+          ${m==='qris'?`<div style="display:flex;justify-content:space-between;padding:4px 0;color:var(--red);font-size:11px;"><span>↳ Fee MDR 0.7%</span><span>− ${fmt(s.fee)}</span></div>
+          <div style="display:flex;justify-content:space-between;padding:4px 0;color:var(--muted);"><span>Bersih QRIS</span><span>${fmt(s.bersih)}</span></div>`:''}
+          <div style="display:flex;justify-content:space-between;padding:4px 0;color:var(--g3);"><span>Sudah disetor</span><span>− ${fmt(s.sudahSetor)}</span></div>
+          <div style="display:flex;justify-content:space-between;padding:6px 0;font-weight:800;font-size:14px;border-top:1px solid var(--border);margin-top:4px;color:${s.belumSetor>0?'var(--amber)':'var(--g3)'};">
+            <span>Belum disetor</span><span>${fmt(s.belumSetor)}</span>
+          </div>
+        </div>
+        ${s.belumSetor>0?`<button class="btn btn-sm btn-primary" style="margin-top:4px;" onclick="switchKasTab('setor');document.getElementById('setor-metode').value='${m}';updateSetorInfo();">📥 Catat Setoran</button>`:''}
+      </div>`;
+    }).join('');
+}
+
+function initSetorForm(){
+  document.getElementById('setor-tgl').value=today();
+  document.getElementById('setor-jumlah').value='';
+  document.getElementById('setor-ket').value='';
+  document.getElementById('setor-selisih').innerHTML='';
+  updateSetorInfo();
+}
+
+function updateSetorInfo(){
+  const m = document.getElementById('setor-metode').value;
+  const saldo = hitungSaldoKas();
+  const s = saldo[m];
+  const info = document.getElementById('setor-info');
+  info.innerHTML = `
+    <div style="display:flex;justify-content:space-between;margin-bottom:4px;"><span>Total penjualan ${METODE_LABEL[m]}</span><b>${fmt(s.kotor)}</b></div>
+    ${m==='qris'?`<div style="display:flex;justify-content:space-between;margin-bottom:4px;color:var(--red);font-size:11px;"><span>Fee MDR 0.7%</span><span>− ${fmt(s.fee)}</span></div>`:''}
+    <div style="display:flex;justify-content:space-between;margin-bottom:4px;"><span>Sudah disetor</span><b>− ${fmt(s.sudahSetor)}</b></div>
+    <div style="display:flex;justify-content:space-between;font-weight:800;color:${s.belumSetor>0?'#92400e':'var(--g2)'};">
+      <span>Saldo belum disetor</span><b>${fmt(s.belumSetor)}</b>
+    </div>`;
+  updateSetorSelisih();
+}
+window.updateSetorInfo=updateSetorInfo;
+
+function updateSetorSelisih(){
+  const m = document.getElementById('setor-metode').value;
+  const jumlah = parseInt(document.getElementById('setor-jumlah').value)||0;
+  const saldo = hitungSaldoKas();
+  const s = saldo[m];
+  const selisih = jumlah - s.belumSetor;
+  const box = document.getElementById('setor-selisih');
+  if(!jumlah){ box.innerHTML=''; return; }
+  const cocok = Math.abs(selisih)<100;
+  box.innerHTML = `<div style="background:${cocok?'var(--gpale)':'var(--amberpale)'};border-radius:8px;padding:8px 12px;font-size:12px;border:1.5px solid ${cocok?'var(--g4)':'#fcd34d'};">
+    <div style="display:flex;justify-content:space-between;">
+      <span>Selisih vs saldo</span>
+      <b style="color:${cocok?'var(--g2)':selisih>0?'var(--blue)':'var(--amber)'};">${selisih>=0?'+':''}${fmt(selisih)}</b>
+    </div>
+    <div style="font-size:11px;color:var(--muted);margin-top:3px;">${cocok?'✅ Cocok dengan saldo':selisih>0?'ℹ️ Lebih dari saldo (ada saldo lama?)':'⚠️ Kurang dari saldo (sebagian belum disetor?)'}</div>
+  </div>`;
+}
+window.updateSetorSelisih=updateSetorSelisih;
+
+async function simpanSetoran(){
+  const tgl = document.getElementById('setor-tgl').value;
+  const metode = document.getElementById('setor-metode').value;
+  const jumlah = parseInt(document.getElementById('setor-jumlah').value)||0;
+  const ket = document.getElementById('setor-ket').value.trim();
+  if(!jumlah||jumlah<1){ alert('Jumlah setoran harus diisi!'); return; }
+
+  const saldo = hitungSaldoKas();
+  const s = saldo[metode];
+  const selisih = jumlah - s.belumSetor;
+
+  setSyncStatus('syncing');
+  try{
+    const id = genId();
+    const data = {id, tanggal:tgl, metode, jumlahAktual:jumlah, saldoBelumSetor:s.belumSetor, selisih, keterangan:ket, createdAt:new Date().toISOString()};
+    await set(ref(db,`setoran/${id}`), data);
+    setSyncStatus('');
+    document.getElementById('setor-jumlah').value='';
+    document.getElementById('setor-ket').value='';
+    document.getElementById('setor-selisih').innerHTML='';
+    alert(`✅ Setoran dicatat!\n${METODE_LABEL[metode]}: ${fmt(jumlah)}`);
+    switchKasTab('saldo');
+  }catch(e){ setSyncStatus('offline'); alert('Gagal: '+e.message); }
+}
+window.simpanSetoran=simpanSetoran;
+
+function filterKasHistory(f, el){
+  kasHistoryFilter=f;
+  document.querySelectorAll('#lv-rekon-kas .pill').forEach(p=>p.classList.remove('active'));
+  el.classList.add('active');
+  renderKasHistory();
+}
+window.filterKasHistory=filterKasHistory;
+
+function renderKasHistory(){
+  let list = getSetoranArray();
+  if(kasHistoryFilter!=='semua') list=list.filter(s=>s.metode===kasHistoryFilter);
+  const c = document.getElementById('kas-history-content');
+  if(!list.length){ c.innerHTML=`<div class="empty"><div class="empty-icon">📋</div><div class="empty-txt">Belum ada setoran</div></div>`; return; }
+  const total = list.reduce((s,v)=>s+v.jumlahAktual,0);
+  c.innerHTML = `<div class="card" style="padding:8px 12px;margin-bottom:8px;">
+    <div style="font-size:11px;color:var(--muted);">Total ${list.length} setoran</div>
+    <div style="font-weight:800;font-size:16px;color:var(--g2);">${fmt(total)}</div>
+  </div>` +
+  list.map(s=>`<div class="card mb8" style="padding:10px 12px;">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;">
+      <div>
+        <div style="font-weight:700;font-size:13px;">${METODE_LABEL[s.metode]||s.metode}</div>
+        <div style="font-size:11px;color:var(--muted);margin-top:2px;">${fmtD(s.tanggal)}${s.keterangan?' · '+s.keterangan:''}</div>
+        <div style="font-size:11px;color:var(--muted);margin-top:1px;">Saldo saat itu: ${fmt(s.saldoBelumSetor)} · Selisih: <span style="color:${Math.abs(s.selisih)<100?'var(--g3)':'var(--amber)'};">${s.selisih>=0?'+':''}${fmt(s.selisih)}</span></div>
+      </div>
+      <div style="font-weight:800;font-size:15px;color:var(--g2);">${fmt(s.jumlahAktual)}</div>
+    </div>
+  </div>`).join('');
+}
+window.renderKasHistory=renderKasHistory;
 
 function filterTx(tipe,el){txFilter=tipe;document.querySelectorAll('#filter-pills .pill').forEach(p=>p.classList.remove('active'));el.classList.add('active');renderTxList();}
 window.filterTx=filterTx;
@@ -2120,6 +2366,7 @@ onValue(ref(db,'stokKon'),  snap=>{STATE.stokKon=snap.val()||{};renderCurrentPag
 onValue(ref(db,'konsinyasi'),snap=>{STATE.konsinyasi=snap.val()||{};renderCurrentPage();});
 onValue(ref(db,'booking'),  snap=>{STATE.booking=snap.val()||{};renderCurrentPage();});
 onValue(ref(db,'piutang'),  snap=>{STATE.piutang=snap.val()||{};renderCurrentPage();});
+onValue(ref(db,'setoran'), snap=>{STATE.setoran=snap.val()||{};renderCurrentPage();});
 
 // Saat tx loaded, sync pembeli juga
 onValue(ref(db,'tx'), snap=>{
