@@ -741,12 +741,52 @@ window.selectPay = function(el, groupId) {
   el.classList.add('active');
 };
 
+function getAllPembeliOptions(){
+  // Gabungkan dari tabel pembeli + semua nama di transaksi
+  const names = new Map();
+  // Dari tabel pembeli (ada kontak)
+  getPbArray().forEach(p=>{ if(p.nama) names.set(p.nama.toLowerCase(), {nama:p.nama, hp:p.hp||''}); });
+  // Dari riwayat transaksi
+  getTxArray().forEach(tx=>{
+    if(tx.pembeli && tx.pembeli!=='Umum'){
+      const key = tx.pembeli.toLowerCase();
+      if(!names.has(key)) names.set(key, {nama:tx.pembeli, hp:tx.kontak||''});
+    }
+  });
+  // Dari booking
+  getBookingArray().forEach(bk=>{
+    if(bk.pembeli){
+      const key = bk.pembeli.toLowerCase();
+      if(!names.has(key)) names.set(key, {nama:bk.pembeli, hp:bk.kontak||''});
+    }
+  });
+  return Array.from(names.values()).sort((a,b)=>a.nama.localeCompare(b.nama));
+}
+
+function buildDatalist(dlId){
+  const dl = document.getElementById(dlId);
+  if(!dl) return;
+  dl.innerHTML = getAllPembeliOptions().map(p=>`<option value="${p.nama}"${p.hp?' data-hp="'+p.hp+'"':''}>`).join('');
+}
+
+function attachPembeliAutofill(inputId, kontakId, dlId){
+  buildDatalist(dlId);
+  const inp = document.getElementById(inputId);
+  const kon = document.getElementById(kontakId);
+  if(!inp || !kon) return;
+  inp.addEventListener('input', function(){
+    const val = this.value.toLowerCase();
+    const match = getAllPembeliOptions().find(p=>p.nama.toLowerCase()===val);
+    if(match && match.hp && !kon.value) kon.value = match.hp;
+  });
+}
+
 function initModal(id){
   if(id==='mo-jual'){
     document.getElementById('j-tgl').value=today();
     ['j-pembeli','j-kontak','j-catatan'].forEach(i=>document.getElementById(i).value='');
     document.getElementById('j-items').innerHTML=''; addRow('j-items','jual'); calcJual();
-    document.getElementById('pb-dl').innerHTML=getPbArray().map(p=>`<option value="${p.nama}">`).join('');
+    attachPembeliAutofill('j-pembeli','j-kontak','pb-dl');
     document.querySelectorAll('#j-pay-group .pay-pill').forEach(p=>p.classList.remove('active'));
     document.querySelector('#j-pay-group .pay-pill[data-pay="tunai"]').classList.add('active');
   }
@@ -760,7 +800,7 @@ function initModal(id){
     document.getElementById('bk-tgl-ambil').value='';
     ['bk-pembeli','bk-kontak','bk-catatan'].forEach(i=>document.getElementById(i).value='');
     document.getElementById('bk-items').innerHTML=''; addRow('bk-items','booking'); calcBooking();
-    document.getElementById('pb-dl-bk').innerHTML=getPbArray().map(p=>`<option value="${p.nama}">`).join('');
+    attachPembeliAutofill('bk-pembeli','bk-kontak','pb-dl-bk');
   }
   if(id==='mo-kon'){
     document.getElementById('k-tgl').value=today();
