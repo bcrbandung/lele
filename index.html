@@ -2276,6 +2276,9 @@ function renderPL(){
   const totalCAPEX  = pengs.filter(t=>CAPEX_CATS.includes(t.kategori)).reduce((s,t)=>s+t.jumlah,0);
   const totalOPEX   = pengs.filter(t=>OPEX_CATS.includes(t.kategori)).reduce((s,t)=>s+t.jumlah,0);
 
+  // Omset kotor dari transaksi penjualan (untuk gross/net profit)
+  const omsetKotor = getIncomeTx().filter(t=>inRange(t.tanggalEfektif, dari, sampai)).reduce((s,t)=>s+(t.totalEfektif||0),0);
+
   // === KALKULASI ===
   const grossProfit   = omsetKotor - totalHPP;
   const grossMargin   = omsetKotor>0 ? (grossProfit/omsetKotor*100).toFixed(1) : 0;
@@ -2288,7 +2291,6 @@ function renderPL(){
   const isBEP        = netProfit >= 0;
 
   // Omset kotor untuk referensi & potensi stok
-  const omsetKotor = getIncomeTx().filter(t=>inRange(t.tanggalEfektif, dari, sampai)).reduce((s,t)=>s+(t.totalEfektif||0),0);
   const nilaiStok = PRODS.reduce((s,p)=>s+(STATE.stok[p.id]||0)*p.price, 0);
 
   // === RENDER ===
