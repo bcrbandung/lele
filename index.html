@@ -846,6 +846,10 @@ tr:last-child td{border-bottom:none;}
         <button class="pay-pill" data-pay="others" onclick="selectPay(this,'edit-pay-group')">💳 Lainnya</button>
       </div>
     </div>
+    <div class="fg" id="edit-biaya-wrap" style="display:none;">
+      <label class="fl">Total Biaya (HPP)</label>
+      <div class="input-group"><div class="ia">Rp</div><input type="number" class="fc" id="edit-biaya" placeholder="0"></div>
+    </div>
     <div class="fg">
       <label class="fl">Catatan</label>
       <input type="text" class="fc" id="edit-catatan" placeholder="Opsional">
@@ -886,6 +890,7 @@ var showSuggest = function(){};
 var pickSuggest = function(nama,hp,inputId,kontakId,suggestId){ var i=document.getElementById(inputId); var k=document.getElementById(kontakId); var b=document.getElementById(suggestId); if(i)i.value=nama; if(k&&hp)k.value=hp; if(b)b.style.display='none'; };
 var calcJual = function(){};
 var calcBooking = function(){};
+var calcBiayaMasuk = function(){};
 var calcRekon = function(){};
 var calcEdit = function(){};
 var loadRekon = function(){};
@@ -954,15 +959,15 @@ const app = initializeApp(firebaseConfig);
 const db  = getDatabase(app);
 
 const PRODS = [
-  {id:'LF', name:'Lele Fillet 300gr',       price:33000, icon:'🐟'},
-  {id:'LFB',name:'Lele Fillet Bumbu 300gr', price:33000, icon:'🌶️'},
-  {id:'LBF',name:'Lele Butterfly',           price:33000, icon:'🦋'},
-  {id:'LH4',name:'Lele Headless isi 4',      price:26000, icon:'🐠'},
-  {id:'NL', name:'Nugget Lele',              price:28000, icon:'🍗'},
-  {id:'KL', name:'Katsu Lele',               price:35000, icon:'🍱'},
-  {id:'LA', name:'Lele Asap',                price:38000, icon:'💨'},
-  {id:'NB', name:'Nila Bumbu',               price:43000, icon:'🐡'},
-  {id:'TP', name:'Tahu Pananya',             price:13000, icon:'🟨', allowZeroStock:true},
+  {id:'LF', name:'Lele Fillet 300gr',       price:33000, hargaBeli:20000, icon:'🐟'},
+  {id:'LFB',name:'Lele Fillet Bumbu 300gr', price:33000, hargaBeli:20000, icon:'🌶️'},
+  {id:'LBF',name:'Lele Butterfly',           price:33000, hargaBeli:20000, icon:'🦋'},
+  {id:'LH4',name:'Lele Headless isi 4',      price:26000, hargaBeli:16000, icon:'🐠'},
+  {id:'NL', name:'Nugget Lele',              price:28000, hargaBeli:18000, icon:'🍗'},
+  {id:'KL', name:'Katsu Lele',               price:35000, hargaBeli:22000, icon:'🍱'},
+  {id:'LA', name:'Lele Asap',                price:38000, hargaBeli:24000, icon:'💨'},
+  {id:'NB', name:'Nila Bumbu',               price:43000, hargaBeli:28000, icon:'🐡'},
+  {id:'TP', name:'Tahu Pananya',             price:13000, hargaBeli:8000,  icon:'🟨', allowZeroStock:true},
 ];
 
 let STATE = {tx:{}, konsinyasi:{}, pembeli:{}, stok:{}, stokKon:{}, booking:{}, piutang:{}, setoran:{}, pengeluaran:{}, pmasukanLain:{}};
@@ -1241,12 +1246,26 @@ function addRow(cid,type){
   if(!c) return;
   const div=document.createElement('div'); div.className='item-row';
   const isCalc=type==='jual'||type==='booking';
-  const cb=isCalc?' onchange="'+(type==='jual'?'calcJual':'calcBooking')+'()"':'';
-  const ib=isCalc?' oninput="'+(type==='jual'?'calcJual':'calcBooking')+'()"':'';
-  div.innerHTML=`<select class="fc"${cb}>${prodOpts()}</select><input type="number" class="fc" placeholder="Qty" min="1" value="1"${ib}><button class="del-btn" onclick="this.closest('.item-row').remove();${isCalc?(type==='jual'?'calcJual':'calcBooking')+'();':''}">✕</button>`;
+  const isMasuk=type==='masuk';
+  const cb=isCalc?' onchange="'+(type==='jual'?'calcJual':'calcBooking')+'()"':isMasuk?' onchange="calcBiayaMasuk()"':'';
+  const ib=isCalc?' oninput="'+(type==='jual'?'calcJual':'calcBooking')+'()"':isMasuk?' oninput="calcBiayaMasuk()"':'';
+  div.innerHTML=`<select class="fc"${cb}>${prodOpts()}</select><input type="number" class="fc" placeholder="Qty" min="1" value="1"${ib}><button class="del-btn" onclick="this.closest('.item-row').remove();${isCalc?(type==='jual'?'calcJual':'calcBooking')+'();':isMasuk?'calcBiayaMasuk();':''}">✕</button>`;
   c.appendChild(div);
 }
 window.addRow=addRow;
+
+function calcBiayaMasuk(){
+  let totalBiaya=0;
+  document.querySelectorAll('#m-items .item-row').forEach(row=>{
+    const pid=row.querySelector('select').value;
+    const qty=parseInt(row.querySelector('input').value)||0;
+    if(!pid||!qty) return;
+    const p=PRODS.find(x=>x.id===pid);
+    if(p && p.hargaBeli) totalBiaya+=p.hargaBeli*qty;
+  });
+  if(totalBiaya>0) document.getElementById('m-biaya').value=totalBiaya;
+}
+window.calcBiayaMasuk=calcBiayaMasuk;
 
 function calcTotal(containerId){
   let total=0,items=0;
@@ -1703,7 +1722,7 @@ window.openEditTx = function(txId){
     });
   }
 
-  // Metode bayar
+  // Metode bayar — hanya untuk penjualan
   const showPay = tx.tipe==='penjualan';
   document.getElementById('edit-pay-wrap').style.display = showPay?'block':'none';
   if(showPay && tx.metodeBayar){
@@ -1711,6 +1730,11 @@ window.openEditTx = function(txId){
     const pp=document.querySelector(`#edit-pay-group .pay-pill[data-pay="${tx.metodeBayar}"]`);
     if(pp) pp.classList.add('active');
   }
+
+  // Biaya — hanya untuk pembelian
+  const showBiaya = tx.tipe==='pembelian'||tx.tipe==='retur';
+  document.getElementById('edit-biaya-wrap').style.display = showBiaya?'block':'none';
+  if(showBiaya) document.getElementById('edit-biaya').value = tx.biaya||'';
 
   calcEdit();
   openModal('mo-edit');
@@ -1735,7 +1759,11 @@ async function simpanEdit(){
   const tgl = document.getElementById('edit-tgl').value;
   const pembeli = document.getElementById('edit-pembeli').value.trim();
   const catatan = document.getElementById('edit-catatan').value.trim();
-  const metodeBayar = tx.tipe==='penjualan' ? getActivePay('edit-pay-group') : tx.metodeBayar;
+  const biaya = parseInt(document.getElementById('edit-biaya').value)||0;
+
+  // metodeBayar: hanya untuk penjualan, pakai existing untuk tipe lain
+  let metodeBayar = tx.metodeBayar||'tunai';
+  if(tx.tipe==='penjualan') metodeBayar = getActivePay('edit-pay-group');
 
   const items=[];
   document.querySelectorAll('#edit-items .item-row').forEach(row=>{
@@ -1752,20 +1780,37 @@ async function simpanEdit(){
 
   setSyncStatus('syncing');
   try{
-    // Kembalikan stok lama, kurangi stok baru
     const stokUpdate={};
-    // Revert stok lama
     if(tx.items) tx.items.forEach(i=>{ stokUpdate[i.prodId]=(stokUpdate[i.prodId]||STATE.stok[i.prodId]||0)+i.qty; });
-    // Kurangi stok baru
     for(const i of items){
       stokUpdate[i.prodId]=((stokUpdate[i.prodId]!==undefined?stokUpdate[i.prodId]:STATE.stok[i.prodId])||0)-i.qty;
       if(stokUpdate[i.prodId]<0){alert(`Stok ${i.nama} tidak cukup!`);setSyncStatus('');return;}
     }
 
-    const updatedTx={...tx, tanggal:tgl, items, total:isHutang?0:totalBaru, totalAsli:totalBaru, metodeBayar, catatan,
-      ...(tx.tipe==='penjualan'?{pembeli}:{}),
-      ...(tx.tipe==='pembelian'||tx.tipe==='retur'?{supplier:pembeli}:{})
+    // Build updatedTx — hapus semua field undefined
+    const updatedTx = {
+      id: tx.id||firebaseKey,
+      tipe: tx.tipe,
+      tanggal: tgl,
+      items,
+      catatan: catatan||'',
+      createdAt: tx.createdAt||new Date().toISOString()
     };
+    if(tx.tipe==='penjualan'){
+      updatedTx.pembeli = pembeli||'Umum';
+      updatedTx.kontak = tx.kontak||'';
+      updatedTx.metodeBayar = metodeBayar;
+      updatedTx.total = isHutang?0:totalBaru;
+      updatedTx.totalAsli = totalBaru;
+      updatedTx.status = tx.status||'lunas';
+      if(tx.tanggalLunas) updatedTx.tanggalLunas = tx.tanggalLunas;
+    }
+    if(tx.tipe==='pembelian'||tx.tipe==='retur'){
+      updatedTx.supplier = pembeli||'-';
+      updatedTx.biaya = biaya;
+      updatedTx.total = -biaya;
+      updatedTx.metodeBayar = metodeBayar;
+    }
 
     const writes=[set(ref(db,`tx/${firebaseKey}`),updatedTx)];
     Object.entries(stokUpdate).forEach(([pid,qty])=>writes.push(set(ref(db,`stok/${pid}`),qty)));
