@@ -2217,7 +2217,16 @@ function renderPL(){
 
   // === PENGELUARAN ===
   const pengs = getPengArray().filter(t=>inRange(t.tanggal, dari, sampai));
-  const totalHPP    = pengs.filter(t=>HPP_CATS.includes(t.kategori)).reduce((s,t)=>s+t.jumlah,0);
+
+  // HPP otomatis dari Barang Masuk (tx tipe pembelian/retur yang punya biaya)
+  const hppDariBarangMasuk = getTxArray()
+    .filter(t=>t.tipe==='pembelian' && t.biaya>0 && inRange(t.tanggal, dari, sampai))
+    .reduce((s,t)=>s+(t.biaya||0), 0);
+
+  // HPP dari pengeluaran manual (kategori hpp/ongkir) — tetap dihitung kalau ada
+  const hppDariPengeluaran = pengs.filter(t=>HPP_CATS.includes(t.kategori)).reduce((s,t)=>s+t.jumlah,0);
+
+  const totalHPP    = hppDariBarangMasuk + hppDariPengeluaran;
   const totalCAPEX  = pengs.filter(t=>CAPEX_CATS.includes(t.kategori)).reduce((s,t)=>s+t.jumlah,0);
   const totalOPEX   = pengs.filter(t=>OPEX_CATS.includes(t.kategori)).reduce((s,t)=>s+t.jumlah,0);
 
@@ -2264,7 +2273,9 @@ function renderPL(){
     <!-- HPP -->
     <div class="card mb8">
       <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:10px;">🐟 HARGA POKOK PENJUALAN (HPP)</div>
+      ${hppDariBarangMasuk>0?`<div style="display:flex;justify-content:space-between;padding:4px 0;font-size:12px;border-bottom:1px solid #f0f5f2;"><span class="muted">📥 Pembelian Barang (Barang Masuk)</span><span style="color:var(--red);">− ${fmt(hppDariBarangMasuk)}</span></div>`:''}
       ${plPengDetail(pengs, HPP_CATS)}
+      ${totalHPP===0?`<div class="empty" style="padding:12px;"><div class="empty-txt">Belum ada HPP — isi field "Total Biaya" saat input Barang Masuk</div></div>`:''}
       <div style="display:flex;justify-content:space-between;padding:6px 0;font-weight:700;font-size:13px;border-top:1px solid var(--border);margin-top:4px;color:var(--red);">
         <span>Total HPP</span><span>− ${fmt(totalHPP)}</span>
       </div>
