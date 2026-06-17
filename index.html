@@ -2553,7 +2553,9 @@ async function hapusPmas(){
 window.hapusPmas=hapusPmas;
 
 window.openEditPengeluaran=function(id){
-  const p=STATE.pengeluaran[id]||Object.values(STATE.pengeluaran||{}).find(x=>x.id===id);
+  currentEditPengId=id;
+  const key=STATE.pengeluaran[id]?id:Object.keys(STATE.pengeluaran||{}).find(k=>STATE.pengeluaran[k].id===id)||id;
+  const p=STATE.pengeluaran[key];
   if(!p) return;
   document.getElementById('edit-peng-id').value=id;
   document.getElementById('edit-peng-tgl').value=p.tanggal||today();
