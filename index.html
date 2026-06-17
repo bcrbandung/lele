@@ -328,6 +328,8 @@ tr:last-child td{border-bottom:none;}
     <button class="action-btn ab-outline" onclick="openModal('mo-masuk')"><span class="ab-icon">📥</span><span>Barang Masuk</span></button>
     <button class="action-btn ab-purple" onclick="openModal('mo-booking')"><span class="ab-icon">📋</span><span>Buat Booking</span></button>
     <button class="action-btn ab-amber" onclick="openModal('mo-kon')"><span class="ab-icon">🏪</span><span>Kirim Konsinyasi</span></button>
+    <button class="action-btn ab-red" onclick="openModal('mo-pengeluaran')"><span class="ab-icon">💸</span><span>Catat Pengeluaran</span></button>
+    <button class="action-btn ab-outline" onclick="openModal('mo-pemasukan-lain')"><span class="ab-icon">💰</span><span>Pemasukan Lain</span></button>
   </div>
   <div class="sh">
     <div class="sh-title">📋 Transaksi Terakhir</div>
@@ -372,12 +374,13 @@ tr:last-child td{border-bottom:none;}
 
 <!-- PAGE LAPORAN -->
 <div class="page" id="page-laporan">
-  <div class="tabs" style="margin-top:4px;">
+  <div class="tabs" style="margin-top:4px;overflow-x:auto;flex-wrap:nowrap;">
     <button class="tab active" onclick="switchLap('transaksi')" id="ltab-transaksi">Transaksi</button>
     <button class="tab" onclick="switchLap('piutang')" id="ltab-piutang">💳 Piutang</button>
     <button class="tab" onclick="switchLap('harian')" id="ltab-harian">Harian</button>
     <button class="tab" onclick="switchLap('produk')" id="ltab-produk">Produk</button>
     <button class="tab" onclick="switchLap('rekon-kas')" id="ltab-rekon-kas">🏦 Kas</button>
+    <button class="tab" onclick="switchLap('pl')" id="ltab-pl">📊 P&L</button>
   </div>
   <div id="lv-transaksi">
     <div class="pills" id="filter-pills">
@@ -401,7 +404,26 @@ tr:last-child td{border-bottom:none;}
   </div>
   <div id="lv-harian" style="display:none;"><div id="list-harian"></div></div>
   <div id="lv-produk" style="display:none;"><div id="list-produk"></div></div>
-  <div id="lv-rekon-kas" style="display:none;">
+  <div id="lv-pl" style="display:none;">
+    <!-- Period Filter -->
+    <div class="card mb8" style="padding:10px 12px;">
+      <div style="font-size:11px;font-weight:700;color:var(--muted);margin-bottom:8px;text-transform:uppercase;letter-spacing:0.3px;">Periode</div>
+      <div class="tabs" style="margin-bottom:8px;">
+        <button class="tab active" onclick="setPLPeriod('bulan')" id="pltab-bulan">Bulan Ini</button>
+        <button class="tab" onclick="setPLPeriod('alltime')" id="pltab-alltime">All Time</button>
+        <button class="tab" onclick="setPLPeriod('custom')" id="pltab-custom">Custom</button>
+      </div>
+      <div id="pl-custom-range" style="display:none;">
+        <div class="form-row">
+          <div class="fg" style="margin-bottom:0;"><label class="fl">Dari</label><input type="date" class="fc" id="pl-dari" onchange="renderPL()"></div>
+          <div class="fg" style="margin-bottom:0;"><label class="fl">Sampai</label><input type="date" class="fc" id="pl-sampai" onchange="renderPL()"></div>
+        </div>
+      </div>
+    </div>
+    <div id="pl-content">
+      <div class="empty"><div class="empty-icon">📊</div><div class="empty-txt">Memuat data...</div></div>
+    </div>
+  </div>
     <div class="tabs" style="margin-bottom:10px;">
       <button class="tab active" onclick="switchKasTab('saldo')" id="kastab-saldo">💰 Saldo</button>
       <button class="tab" onclick="switchKasTab('setor')" id="kastab-setor">📥 Catat Setoran</button>
@@ -640,6 +662,92 @@ tr:last-child td{border-bottom:none;}
   </div>
 </div>
 
+<!-- MODAL PENGELUARAN -->
+<div class="mo" id="mo-pengeluaran">
+  <div class="mo-box">
+    <div class="mo-hdr"><div class="mo-title">💸 Catat Pengeluaran</div><button class="mo-close" onclick="closeModal('mo-pengeluaran')">✕</button></div>
+    <div class="fg"><label class="fl">Tanggal</label><input type="date" class="fc" id="peng-tgl"></div>
+    <div class="fg">
+      <label class="fl">Kategori</label>
+      <select class="fc" id="peng-kategori">
+        <option value="hpp">🐟 HPP — Beli Barang ke Supplier</option>
+        <option value="ongkir">🚚 Ongkir / Pengiriman</option>
+        <option value="capex">🏪 CAPEX — Aset (Freezer, Alat, dll)</option>
+        <option value="opex_packging">📦 OPEX — Packaging (Plastik, Box)</option>
+        <option value="opex_listrik">💡 OPEX — Listrik / Utilitas</option>
+        <option value="opex_iklan">📣 OPEX — Iklan & Promosi</option>
+        <option value="opex_admin">💳 OPEX — Admin Fee / Biaya Bank</option>
+        <option value="opex_gaji">👷 OPEX — Gaji / Upah</option>
+        <option value="opex_lain">🔧 OPEX — Lainnya</option>
+      </select>
+    </div>
+    <div class="fg"><label class="fl">Keterangan</label><input type="text" class="fc" id="peng-ket" placeholder="cth: beli freezer 2 pintu, plastik 1kg"></div>
+    <div class="fg">
+      <label class="fl">Jumlah</label>
+      <div class="input-group"><div class="ia">Rp</div><input type="number" class="fc" id="peng-jumlah" placeholder="0"></div>
+    </div>
+    <div class="fg">
+      <label class="fl">Metode Bayar</label>
+      <select class="fc" id="peng-metode">
+        <option value="tunai">💵 Tunai</option>
+        <option value="transfer">🏦 Transfer</option>
+        <option value="qris">📱 QRIS</option>
+        <option value="others">💳 Lainnya</option>
+      </select>
+    </div>
+    <button class="btn btn-red btn-full" onclick="simpanPengeluaran()">💾 Simpan Pengeluaran</button>
+  </div>
+</div>
+
+<!-- MODAL PEMASUKAN LAIN -->
+<div class="mo" id="mo-pemasukan-lain">
+  <div class="mo-box">
+    <div class="mo-hdr"><div class="mo-title">💰 Pemasukan Lain</div><button class="mo-close" onclick="closeModal('mo-pemasukan-lain')">✕</button></div>
+    <div class="fg"><label class="fl">Tanggal</label><input type="date" class="fc" id="pmas-tgl"></div>
+    <div class="fg">
+      <label class="fl">Kategori</label>
+      <select class="fc" id="pmas-kategori">
+        <option value="investasi">💼 Investasi dari Investor</option>
+        <option value="pinjaman">🏦 Pinjaman / Modal</option>
+        <option value="cashback">🎁 Cashback dari Supplier</option>
+        <option value="lain">💰 Pemasukan Lainnya</option>
+      </select>
+    </div>
+    <div class="fg"><label class="fl">Keterangan</label><input type="text" class="fc" id="pmas-ket" placeholder="cth: investasi awal Bu Siti, cashback Tokopedia"></div>
+    <div class="fg">
+      <label class="fl">Jumlah</label>
+      <div class="input-group"><div class="ia">Rp</div><input type="number" class="fc" id="pmas-jumlah" placeholder="0"></div>
+    </div>
+    <button class="btn btn-primary btn-full" onclick="simpanPemasukanLain()">💾 Simpan</button>
+  </div>
+</div>
+
+<!-- MODAL EDIT PENGELUARAN -->
+<div class="mo" id="mo-edit-peng">
+  <div class="mo-box">
+    <div class="mo-hdr"><div class="mo-title">✏️ Edit Pengeluaran</div><button class="mo-close" onclick="closeModal('mo-edit-peng')">✕</button></div>
+    <input type="hidden" id="edit-peng-id">
+    <div class="fg"><label class="fl">Tanggal</label><input type="date" class="fc" id="edit-peng-tgl"></div>
+    <div class="fg"><label class="fl">Kategori</label>
+      <select class="fc" id="edit-peng-kategori">
+        <option value="hpp">🐟 HPP — Beli Barang ke Supplier</option>
+        <option value="ongkir">🚚 Ongkir / Pengiriman</option>
+        <option value="capex">🏪 CAPEX — Aset</option>
+        <option value="opex_packging">📦 OPEX — Packaging</option>
+        <option value="opex_listrik">💡 OPEX — Listrik</option>
+        <option value="opex_iklan">📣 OPEX — Iklan & Promosi</option>
+        <option value="opex_admin">💳 OPEX — Admin Fee</option>
+        <option value="opex_gaji">👷 OPEX — Gaji</option>
+        <option value="opex_lain">🔧 OPEX — Lainnya</option>
+      </select>
+    </div>
+    <div class="fg"><label class="fl">Keterangan</label><input type="text" class="fc" id="edit-peng-ket"></div>
+    <div class="fg"><label class="fl">Jumlah</label><div class="input-group"><div class="ia">Rp</div><input type="number" class="fc" id="edit-peng-jumlah"></div></div>
+    <button class="btn btn-primary btn-full" onclick="simpanEditPengeluaran()">💾 Simpan</button>
+    <button class="btn btn-red btn-full" style="margin-top:6px;" onclick="hapusPengeluaran()">🗑️ Hapus</button>
+  </div>
+</div>
+
 <!-- MODAL KOREKSI STOK -->
 <div class="mo" id="mo-koreksi">
   <div class="mo-box">
@@ -811,6 +919,13 @@ var simpanSetoran = _loading;
 var filterKasHistory = function(f,el){};
 var renderKasHistory = function(){};
 var renderKasSaldo = function(){};
+var setPLPeriod = function(p){};
+var renderPL = function(){};
+var simpanPengeluaran = _loading;
+var simpanPemasukanLain = _loading;
+var simpanEditPengeluaran = _loading;
+var hapusPengeluaran = _loading;
+var openEditPengeluaran = function(id){};
 var simpanLunas = function(){};
 var openEditPb = function(id){};
 var simpanEditPb = function(){};
@@ -850,7 +965,7 @@ const PRODS = [
   {id:'TP', name:'Tahu Pananya',             price:13000, icon:'🟨', allowZeroStock:true},
 ];
 
-let STATE = {tx:{}, konsinyasi:{}, pembeli:{}, stok:{}, stokKon:{}, booking:{}, piutang:{}, setoran:{}};
+let STATE = {tx:{}, konsinyasi:{}, pembeli:{}, stok:{}, stokKon:{}, booking:{}, piutang:{}, setoran:{}, pengeluaran:{}, pmasukanLain:{}};
 let currentApproveId = null;
 let currentLunasId   = null;
 
@@ -989,6 +1104,16 @@ function initModal(id){
     getKonArray().filter(k=>k.status==='aktif').forEach(k=>{ sel.innerHTML+=`<option value="${k.id}">${k.toko} — ${fmtD(k.tanggal)}</option>`; });
     document.getElementById('r-detail').style.display='none';
     document.getElementById('r-tgl').value=today();
+  }
+  if(id==='mo-pengeluaran'){
+    document.getElementById('peng-tgl').value=today();
+    document.getElementById('peng-ket').value='';
+    document.getElementById('peng-jumlah').value='';
+  }
+  if(id==='mo-pemasukan-lain'){
+    document.getElementById('pmas-tgl').value=today();
+    document.getElementById('pmas-ket').value='';
+    document.getElementById('pmas-jumlah').value='';
   }
   if(id==='mo-koreksi'){
     document.getElementById('koreksi-ket').value='';
@@ -1764,7 +1889,7 @@ function renderBookingList(){
 // ======================== LAPORAN
 let txFilter='semua', piutangFilter='semua';
 function switchLap(tab, silent=false){
-  ['transaksi','piutang','harian','produk','rekon-kas'].forEach(t=>{
+  ['transaksi','piutang','harian','produk','rekon-kas','pl'].forEach(t=>{
     var el=document.getElementById('lv-'+t);
     var btn=document.getElementById('ltab-'+t);
     if(el) el.style.display=t===tab?'block':'none';
@@ -1776,6 +1901,7 @@ function switchLap(tab, silent=false){
     if(tab==='piutang') renderPiutang();
     if(tab==='transaksi') renderTxList();
     if(tab==='rekon-kas'){ renderKasSaldo(); }
+    if(tab==='pl'){ renderPL(); }
   }
 }
 window.switchLap=switchLap;
@@ -2030,6 +2156,291 @@ function renderKasHistory(){
   </div>`).join('');
 }
 window.renderKasHistory=renderKasHistory;
+
+// ======================== P&L
+const KATEGORI_LABEL = {
+  hpp:'🐟 HPP Barang', ongkir:'🚚 Ongkir', capex:'🏪 CAPEX',
+  opex_packging:'📦 Packaging', opex_listrik:'💡 Listrik',
+  opex_iklan:'📣 Iklan & Promosi', opex_admin:'💳 Admin Fee',
+  opex_gaji:'👷 Gaji', opex_lain:'🔧 OPEX Lainnya',
+  investasi:'💼 Investasi', pinjaman:'🏦 Pinjaman', cashback:'🎁 Cashback', lain:'💰 Lainnya'
+};
+const CAPEX_CATS   = ['capex'];
+const HPP_CATS     = ['hpp','ongkir'];
+const OPEX_CATS    = ['opex_packging','opex_listrik','opex_iklan','opex_admin','opex_gaji','opex_lain'];
+const MODAL_CATS   = ['investasi','pinjaman','cashback','lain'];
+
+let plPeriod = 'bulan';
+
+function getPengArray(){ return Object.values(STATE.pengeluaran||{}).sort((a,b)=>new Date(b.tanggal)-new Date(a.tanggal)); }
+function getPmasArray(){ return Object.values(STATE.pmasukanLain||{}).sort((a,b)=>new Date(b.tanggal)-new Date(a.tanggal)); }
+
+function setPLPeriod(p){
+  plPeriod=p;
+  ['bulan','alltime','custom'].forEach(t=>{
+    document.getElementById('pltab-'+t).classList.toggle('active',t===p);
+  });
+  document.getElementById('pl-custom-range').style.display = p==='custom'?'block':'none';
+  if(p!=='custom') renderPL();
+}
+window.setPLPeriod=setPLPeriod;
+
+function getPLDateRange(){
+  const now = new Date();
+  if(plPeriod==='bulan'){
+    const y=now.getFullYear(), m=now.getMonth();
+    return { dari: new Date(y,m,1).toISOString().substr(0,10), sampai: new Date(y,m+1,0).toISOString().substr(0,10) };
+  }
+  if(plPeriod==='alltime') return { dari:'2000-01-01', sampai:'2099-12-31' };
+  if(plPeriod==='custom'){
+    return { dari: document.getElementById('pl-dari').value||'2000-01-01', sampai: document.getElementById('pl-sampai').value||'2099-12-31' };
+  }
+  return { dari:'2000-01-01', sampai:'2099-12-31' };
+}
+
+function inRange(tgl, dari, sampai){ return tgl>=dari && tgl<=sampai; }
+
+function renderPL(){
+  const {dari, sampai} = getPLDateRange();
+  const c = document.getElementById('pl-content');
+  if(plPeriod==='custom' && (!dari||!sampai)){ c.innerHTML=`<div class="empty"><div class="empty-txt">Pilih rentang tanggal</div></div>`; return; }
+
+  // === PEMASUKAN ===
+  const incomes = getIncomeTx().filter(t=>inRange(t.tanggalEfektif, dari, sampai));
+  const totalPenjualan = incomes.reduce((s,t)=>s+(t.totalEfektif||0),0);
+
+  const pmas = getPmasArray().filter(t=>inRange(t.tanggal, dari, sampai));
+  const totalInvestasi = pmas.filter(t=>t.kategori==='investasi').reduce((s,t)=>s+t.jumlah,0);
+  const totalPinjaman  = pmas.filter(t=>t.kategori==='pinjaman').reduce((s,t)=>s+t.jumlah,0);
+  const totalCashback  = pmas.filter(t=>t.kategori==='cashback').reduce((s,t)=>s+t.jumlah,0);
+  const totalPmasLain  = pmas.filter(t=>t.kategori==='lain').reduce((s,t)=>s+t.jumlah,0);
+
+  // === PENGELUARAN ===
+  const pengs = getPengArray().filter(t=>inRange(t.tanggal, dari, sampai));
+  const totalHPP    = pengs.filter(t=>HPP_CATS.includes(t.kategori)).reduce((s,t)=>s+t.jumlah,0);
+  const totalCAPEX  = pengs.filter(t=>CAPEX_CATS.includes(t.kategori)).reduce((s,t)=>s+t.jumlah,0);
+  const totalOPEX   = pengs.filter(t=>OPEX_CATS.includes(t.kategori)).reduce((s,t)=>s+t.jumlah,0);
+
+  // === KALKULASI ===
+  const grossProfit   = totalPenjualan - totalHPP;
+  const grossMargin   = totalPenjualan>0 ? (grossProfit/totalPenjualan*100).toFixed(1) : 0;
+  const netProfit     = grossProfit - totalOPEX - totalCAPEX;
+  const netMargin     = totalPenjualan>0 ? (netProfit/totalPenjualan*100).toFixed(1) : 0;
+  const totalBiaya    = totalHPP + totalOPEX + totalCAPEX;
+  const cashIn        = totalPenjualan + totalInvestasi + totalPinjaman + totalCashback + totalPmasLain;
+  const cashOut       = totalBiaya;
+  const cashNet       = cashIn - cashOut;
+  const isBEP        = netProfit >= 0;
+
+  // Nilai stok saat ini
+  const nilaiStok = PRODS.reduce((s,p)=>s+(STATE.stok[p.id]||0)*p.price, 0);
+
+  // === RENDER ===
+  const periodLabel = plPeriod==='bulan' ? new Date().toLocaleDateString('id-ID',{month:'long',year:'numeric'})
+    : plPeriod==='alltime' ? 'Semua Waktu'
+    : `${fmtD(dari)} – ${fmtD(sampai)}`;
+
+  c.innerHTML = `
+    <!-- STATUS BEP -->
+    <div style="background:${isBEP?'var(--g2)':'var(--red)'};color:white;border-radius:var(--r);padding:14px 16px;margin-bottom:10px;text-align:center;">
+      <div style="font-size:11px;opacity:0.7;margin-bottom:4px;">${periodLabel}</div>
+      <div style="font-size:22px;font-weight:800;">${isBEP?'✅ PROFIT':'⚠️ BELUM BEP'}</div>
+      <div style="font-size:13px;margin-top:4px;opacity:0.85;">Net Profit: ${netProfit>=0?'+':''}${fmt(netProfit)} (${netMargin}%)</div>
+    </div>
+
+    <!-- PEMASUKAN -->
+    <div class="card mb8">
+      <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:10px;">📈 PEMASUKAN</div>
+      ${plRow('Penjualan', totalPenjualan, 'var(--g2)', true)}
+      ${totalInvestasi>0?plRow('Investasi', totalInvestasi, 'var(--blue)'):''}
+      ${totalPinjaman>0?plRow('Pinjaman', totalPinjaman, 'var(--blue)'):''}
+      ${totalCashback>0?plRow('Cashback', totalCashback, 'var(--g3)'):''}
+      ${totalPmasLain>0?plRow('Lainnya', totalPmasLain, 'var(--muted)'):''}
+      <div style="display:flex;justify-content:space-between;padding:8px 0;font-weight:800;font-size:14px;border-top:2px solid var(--border);margin-top:6px;color:var(--g2);">
+        <span>Total Pemasukan</span><span>${fmt(cashIn)}</span>
+      </div>
+    </div>
+
+    <!-- HPP -->
+    <div class="card mb8">
+      <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:10px;">🐟 HARGA POKOK PENJUALAN (HPP)</div>
+      ${plPengDetail(pengs, HPP_CATS)}
+      <div style="display:flex;justify-content:space-between;padding:6px 0;font-weight:700;font-size:13px;border-top:1px solid var(--border);margin-top:4px;color:var(--red);">
+        <span>Total HPP</span><span>− ${fmt(totalHPP)}</span>
+      </div>
+      <div style="display:flex;justify-content:space-between;padding:6px 12px;background:${grossProfit>=0?'var(--gpale)':'var(--redpale)'};border-radius:8px;font-weight:800;font-size:13px;margin-top:6px;">
+        <span>Gross Profit</span><span style="color:${grossProfit>=0?'var(--g2)':'var(--red)'};">${grossProfit>=0?'+':''}${fmt(grossProfit)} (${grossMargin}%)</span>
+      </div>
+    </div>
+
+    <!-- OPEX -->
+    <div class="card mb8">
+      <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:10px;">⚙️ BIAYA OPERASIONAL (OPEX)</div>
+      ${plPengDetail(pengs, OPEX_CATS)}
+      ${totalOPEX===0?`<div class="empty" style="padding:12px;"><div class="empty-txt">Belum ada pengeluaran OPEX</div></div>`:''}
+      <div style="display:flex;justify-content:space-between;padding:6px 0;font-weight:700;font-size:13px;border-top:1px solid var(--border);margin-top:4px;color:var(--red);">
+        <span>Total OPEX</span><span>− ${fmt(totalOPEX)}</span>
+      </div>
+    </div>
+
+    <!-- CAPEX -->
+    <div class="card mb8">
+      <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:10px;">🏪 ASET (CAPEX)</div>
+      ${plPengDetail(pengs, CAPEX_CATS)}
+      ${totalCAPEX===0?`<div class="empty" style="padding:12px;"><div class="empty-txt">Belum ada pengeluaran CAPEX</div></div>`:''}
+      <div style="display:flex;justify-content:space-between;padding:6px 0;font-weight:700;font-size:13px;border-top:1px solid var(--border);margin-top:4px;color:var(--red);">
+        <span>Total CAPEX</span><span>− ${fmt(totalCAPEX)}</span>
+      </div>
+    </div>
+
+    <!-- SUMMARY -->
+    <div class="card mb8" style="background:#f8faf9;">
+      <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:10px;">📊 RINGKASAN P&L</div>
+      ${plRow('Total Penjualan', totalPenjualan)}
+      ${plRow('HPP', -totalHPP, 'var(--red)')}
+      <div style="display:flex;justify-content:space-between;padding:6px 0;font-weight:700;font-size:13px;color:${grossProfit>=0?'var(--g3)':'var(--red)'};">
+        <span>= Gross Profit</span><span>${grossProfit>=0?'+':''}${fmt(grossProfit)}</span>
+      </div>
+      ${plRow('OPEX', -totalOPEX, 'var(--red)')}
+      ${plRow('CAPEX', -totalCAPEX, 'var(--red)')}
+      <div style="display:flex;justify-content:space-between;padding:8px 12px;background:${netProfit>=0?'var(--g2)':'var(--red)'};color:white;border-radius:8px;font-weight:800;font-size:14px;margin-top:8px;">
+        <span>= Net Profit</span><span>${netProfit>=0?'+':''}${fmt(netProfit)}</span>
+      </div>
+    </div>
+
+    <!-- BEP & STOK -->
+    <div class="card mb8">
+      <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:10px;">🎯 BEP & POTENSI STOK</div>
+      <div style="font-size:12px;margin-bottom:10px;">
+        <div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid #f0f5f2;">
+          <span class="muted">Total Biaya (HPP+OPEX+CAPEX)</span><span style="font-weight:700;">${fmt(totalBiaya)}</span>
+        </div>
+        <div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid #f0f5f2;">
+          <span class="muted">Total Penjualan</span><span style="font-weight:700;">${fmt(totalPenjualan)}</span>
+        </div>
+        <div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid #f0f5f2;">
+          <span class="muted">Sisa menuju BEP</span>
+          <span style="font-weight:800;color:${isBEP?'var(--g2)':'var(--red)'};">${isBEP?'✅ Sudah BEP':'Kurang '+fmt(totalBiaya-totalPenjualan)}</span>
+        </div>
+        <div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid #f0f5f2;">
+          <span class="muted">Nilai Stok di Gudang</span><span style="font-weight:700;color:var(--blue);">${fmt(nilaiStok)}</span>
+        </div>
+        <div style="display:flex;justify-content:space-between;padding:5px 0;">
+          <span class="muted">Potensi jika stok habis terjual</span><span style="font-weight:800;color:var(--g2);">${fmt(totalPenjualan+nilaiStok)}</span>
+        </div>
+      </div>
+    </div>
+
+    <button class="btn btn-outline btn-full" onclick="openModal('mo-pengeluaran')" style="margin-bottom:6px;">+ Catat Pengeluaran</button>
+    <button class="btn btn-outline btn-full" onclick="openModal('mo-pemasukan-lain')">+ Catat Pemasukan Lain</button>
+    <div style="margin-top:10px;"><div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.3px;margin-bottom:6px;">Riwayat Pengeluaran</div>
+    ${pengs.length?pengs.map(p=>`
+      <div class="card mb8" style="padding:10px 12px;">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;">
+          <div>
+            <div style="font-weight:600;font-size:12px;">${KATEGORI_LABEL[p.kategori]||p.kategori}</div>
+            <div style="font-size:11px;color:var(--muted);">${fmtD(p.tanggal)} · ${p.keterangan||'—'}</div>
+          </div>
+          <div style="display:flex;align-items:center;gap:6px;">
+            <span style="font-weight:800;color:var(--red);">− ${fmt(p.jumlah)}</span>
+            <button class="btn btn-sm btn-outline" style="padding:4px 7px;" onclick="openEditPengeluaran('${p.id||p._key}')">✏️</button>
+          </div>
+        </div>
+      </div>`).join(''):`<div class="empty"><div class="empty-txt">Belum ada pengeluaran di periode ini</div></div>`}
+    </div>`;
+}
+window.renderPL=renderPL;
+
+function plRow(label, val, color='var(--text)', bold=false){
+  return `<div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid #f0f5f2;font-size:12px;">
+    <span class="muted">${label}</span>
+    <span style="font-weight:${bold?'800':'600'};color:${color||'var(--text)'};">${val>=0?'+':''}${fmt(Math.abs(val))}</span>
+  </div>`;
+}
+
+function plPengDetail(pengs, cats){
+  const filtered = pengs.filter(p=>cats.includes(p.kategori));
+  if(!filtered.length) return '';
+  // Group by kategori
+  const byKat = {};
+  filtered.forEach(p=>{
+    if(!byKat[p.kategori]) byKat[p.kategori]=0;
+    byKat[p.kategori]+=p.jumlah;
+  });
+  return Object.entries(byKat).map(([k,v])=>`
+    <div style="display:flex;justify-content:space-between;padding:4px 0;font-size:12px;border-bottom:1px solid #f0f5f2;">
+      <span class="muted">${KATEGORI_LABEL[k]||k}</span>
+      <span style="color:var(--red);">− ${fmt(v)}</span>
+    </div>`).join('');
+}
+
+// Simpan pengeluaran
+async function simpanPengeluaran(){
+  const tgl=document.getElementById('peng-tgl').value;
+  const kat=document.getElementById('peng-kategori').value;
+  const ket=document.getElementById('peng-ket').value.trim();
+  const jml=parseInt(document.getElementById('peng-jumlah').value)||0;
+  const met=document.getElementById('peng-metode').value;
+  if(!jml||jml<1){alert('Jumlah wajib diisi!');return;}
+  setSyncStatus('syncing');
+  try{
+    const id=genId();
+    await set(ref(db,`pengeluaran/${id}`),{id,tanggal:tgl,kategori:kat,keterangan:ket,jumlah:jml,metode:met,createdAt:new Date().toISOString()});
+    setSyncStatus(''); closeModal('mo-pengeluaran');
+    alert(`✅ Pengeluaran dicatat!\n${fmt(jml)}`);
+  }catch(e){setSyncStatus('offline');alert('Gagal: '+e.message);}
+}
+window.simpanPengeluaran=simpanPengeluaran;
+
+// Simpan pemasukan lain
+async function simpanPemasukanLain(){
+  const tgl=document.getElementById('pmas-tgl').value;
+  const kat=document.getElementById('pmas-kategori').value;
+  const ket=document.getElementById('pmas-ket').value.trim();
+  const jml=parseInt(document.getElementById('pmas-jumlah').value)||0;
+  if(!jml||jml<1){alert('Jumlah wajib diisi!');return;}
+  setSyncStatus('syncing');
+  try{
+    const id=genId();
+    await set(ref(db,`pmasukanLain/${id}`),{id,tanggal:tgl,kategori:kat,keterangan:ket,jumlah:jml,createdAt:new Date().toISOString()});
+    setSyncStatus(''); closeModal('mo-pemasukan-lain');
+    alert(`✅ Pemasukan dicatat!\n${fmt(jml)}`);
+  }catch(e){setSyncStatus('offline');alert('Gagal: '+e.message);}
+}
+window.simpanPemasukanLain=simpanPemasukanLain;
+
+// Edit pengeluaran
+let currentEditPengId=null;
+window.openEditPengeluaran=function(id){
+  currentEditPengId=id;
+  const p=STATE.pengeluaran[id]||Object.values(STATE.pengeluaran||{}).find(x=>x.id===id);
+  if(!p) return;
+  document.getElementById('edit-peng-id').value=id;
+  document.getElementById('edit-peng-tgl').value=p.tanggal||today();
+  document.getElementById('edit-peng-kategori').value=p.kategori||'opex_lain';
+  document.getElementById('edit-peng-ket').value=p.keterangan||'';
+  document.getElementById('edit-peng-jumlah').value=p.jumlah||0;
+  openModal('mo-edit-peng');
+};
+async function simpanEditPengeluaran(){
+  const key=STATE.pengeluaran[currentEditPengId]?currentEditPengId:Object.keys(STATE.pengeluaran||{}).find(k=>STATE.pengeluaran[k].id===currentEditPengId)||currentEditPengId;
+  const jml=parseInt(document.getElementById('edit-peng-jumlah').value)||0;
+  if(!jml){alert('Jumlah wajib!');return;}
+  setSyncStatus('syncing');
+  try{
+    await update(ref(db,`pengeluaran/${key}`),{tanggal:document.getElementById('edit-peng-tgl').value,kategori:document.getElementById('edit-peng-kategori').value,keterangan:document.getElementById('edit-peng-ket').value.trim(),jumlah:jml});
+    setSyncStatus(''); closeModal('mo-edit-peng');
+  }catch(e){setSyncStatus('offline');alert('Gagal: '+e.message);}
+}
+window.simpanEditPengeluaran=simpanEditPengeluaran;
+async function hapusPengeluaran(){
+  if(!confirm('Hapus pengeluaran ini?')) return;
+  const key=STATE.pengeluaran[currentEditPengId]?currentEditPengId:Object.keys(STATE.pengeluaran||{}).find(k=>STATE.pengeluaran[k].id===currentEditPengId)||currentEditPengId;
+  setSyncStatus('syncing');
+  try{ await remove(ref(db,`pengeluaran/${key}`)); setSyncStatus(''); closeModal('mo-edit-peng'); }
+  catch(e){setSyncStatus('offline');alert('Gagal: '+e.message);}
+}
+window.hapusPengeluaran=hapusPengeluaran;
 
 function filterTx(tipe,el){txFilter=tipe;document.querySelectorAll('#filter-pills .pill').forEach(p=>p.classList.remove('active'));el.classList.add('active');renderTxList();}
 window.filterTx=filterTx;
@@ -2512,7 +2923,9 @@ onValue(ref(db,'stokKon'),  snap=>{STATE.stokKon=snap.val()||{};renderCurrentPag
 onValue(ref(db,'konsinyasi'),snap=>{STATE.konsinyasi=snap.val()||{};renderCurrentPage();});
 onValue(ref(db,'booking'),  snap=>{STATE.booking=snap.val()||{};renderCurrentPage();});
 onValue(ref(db,'piutang'),  snap=>{STATE.piutang=snap.val()||{};renderCurrentPage();});
-onValue(ref(db,'setoran'), snap=>{STATE.setoran=snap.val()||{};renderCurrentPage();});
+onValue(ref(db,'setoran'),     snap=>{STATE.setoran=snap.val()||{};renderCurrentPage();});
+onValue(ref(db,'pengeluaran'), snap=>{STATE.pengeluaran=snap.val()||{};renderCurrentPage();});
+onValue(ref(db,'pmasukanLain'),snap=>{STATE.pmasukanLain=snap.val()||{};renderCurrentPage();});
 
 // Saat tx loaded, sync pembeli juga
 onValue(ref(db,'tx'), snap=>{
