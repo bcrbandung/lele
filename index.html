@@ -2272,12 +2272,14 @@ function inRange(tgl, dari, sampai){ return tgl>=dari && tgl<=sampai; }
 function renderPL(){
   const {dari, sampai} = getPLDateRange();
   const c = document.getElementById('pl-content');
+  if(!c) return;
   if(plPeriod==='custom' && (!dari||!sampai)){ c.innerHTML=`<div class="empty"><div class="empty-txt">Pilih rentang tanggal</div></div>`; return; }
+  try{
 
   // === PEMASUKAN ===
-  // Penjualan = uang yang benar-benar sudah disetor/masuk rekening (dari Kas)
-  const setoran = getSetoranArray().filter(t=>inRange(t.tanggal, dari, sampai));
-  const totalPenjualan = setoran.reduce((s,t)=>s+(t.jumlahAktual||0), 0);
+  // Omset kotor dari transaksi penjualan
+  const omsetKotor = getIncomeTx().filter(t=>inRange(t.tanggalEfektif, dari, sampai)).reduce((s,t)=>s+(t.totalEfektif||0),0);
+  const totalPenjualan = omsetKotor;
 
   const pmas = getPmasArray().filter(t=>inRange(t.tanggal, dari, sampai));
   const totalInvestasi = pmas.filter(t=>t.kategori==='investasi').reduce((s,t)=>s+t.jumlah,0);
@@ -2300,120 +2302,110 @@ function renderPL(){
   const totalCAPEX  = pengs.filter(t=>CAPEX_CATS.includes(t.kategori)).reduce((s,t)=>s+t.jumlah,0);
   const totalOPEX   = pengs.filter(t=>OPEX_CATS.includes(t.kategori)).reduce((s,t)=>s+t.jumlah,0);
 
-  // Omset kotor dari transaksi penjualan (untuk gross/net profit)
-  const omsetKotor = getIncomeTx().filter(t=>inRange(t.tanggalEfektif, dari, sampai)).reduce((s,t)=>s+(t.totalEfektif||0),0);
-
   // === KALKULASI ===
-  const grossProfit   = omsetKotor - totalHPP;
-  const grossMargin   = omsetKotor>0 ? (grossProfit/omsetKotor*100).toFixed(1) : 0;
-  const netProfit     = grossProfit - totalOPEX - totalCAPEX;
-  const netMargin     = omsetKotor>0 ? (netProfit/omsetKotor*100).toFixed(1) : 0;
-  const totalBiaya    = totalHPP + totalOPEX + totalCAPEX;
-  const cashIn        = totalPenjualan + totalInvestasi + totalPinjaman + totalCashback + totalPmasLain;
-  const cashOut       = totalBiaya;
-  const cashNet       = cashIn - cashOut;
-  const isBEP        = netProfit >= 0;
+  const grossProfit = omsetKotor - totalHPP;
+  const grossMargin = omsetKotor>0 ? (grossProfit/omsetKotor*100).toFixed(1) : 0;
+  const netProfit   = grossProfit - totalOPEX;
+  const netMargin   = omsetKotor>0 ? (netProfit/omsetKotor*100).toFixed(1) : 0;
+  const isBEP       = netProfit >= 0;
+  const totalBiaya  = totalHPP + totalOPEX;
 
-  // Omset kotor untuk referensi & potensi stok
-  const nilaiStok = PRODS.reduce((s,p)=>s+(STATE.stok[p.id]||0)*p.price, 0);
+  const cashIn  = omsetKotor + totalInvestasi + totalPinjaman + totalCashback + totalPmasLain;
+  const cashOut = totalHPP + totalOPEX + totalCAPEX;
+  const cashNet = cashIn - cashOut;
 
-  // === RENDER ===
+  const nilaiStok   = PRODS.reduce((s,p)=>s+(STATE.stok[p.id]||0)*p.price, 0);
+  const totalSetoran= getSetoranArray().filter(t=>inRange(t.tanggal, dari, sampai)).reduce((s,t)=>s+(t.jumlahAktual||0),0);
   const periodLabel = plPeriod==='bulan' ? new Date().toLocaleDateString('id-ID',{month:'long',year:'numeric'})
     : plPeriod==='alltime' ? 'Semua Waktu'
     : `${fmtD(dari)} – ${fmtD(sampai)}`;
 
   c.innerHTML = `
-    <!-- STATUS BEP -->
+    <!-- STATUS -->
     <div style="background:${isBEP?'var(--g2)':'var(--red)'};color:white;border-radius:var(--r);padding:14px 16px;margin-bottom:10px;text-align:center;">
       <div style="font-size:11px;opacity:0.7;margin-bottom:4px;">${periodLabel}</div>
-      <div style="font-size:22px;font-weight:800;">${isBEP?'✅ PROFIT':'⚠️ BELUM BEP'}</div>
+      <div style="font-size:22px;font-weight:800;">${isBEP?'✅ PROFIT':'⚠️ BELUM PROFIT'}</div>
       <div style="font-size:13px;margin-top:4px;opacity:0.85;">Net Profit: ${netProfit>=0?'+':''}${fmt(netProfit)} (${netMargin}%)</div>
     </div>
 
-    <!-- PEMASUKAN -->
+    <!-- P&L -->
     <div class="card mb8">
-      <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:10px;">📈 PEMASUKAN</div>
-      ${plRow('Uang Masuk Rekening (Setoran)', totalPenjualan, 'var(--g2)', true)}
-      ${totalInvestasi>0?plRow('Investasi', totalInvestasi, 'var(--blue)'):''}
-      ${totalPinjaman>0?plRow('Pinjaman', totalPinjaman, 'var(--blue)'):''}
-      ${totalCashback>0?plRow('Cashback', totalCashback, 'var(--g3)'):''}
-      ${totalPmasLain>0?plRow('Lainnya', totalPmasLain, 'var(--muted)'):''}
-      <div style="display:flex;justify-content:space-between;padding:8px 0;font-weight:800;font-size:14px;border-top:2px solid var(--border);margin-top:6px;color:var(--g2);">
-        <span>Total Pemasukan</span><span>${fmt(cashIn)}</span>
+      <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:10px;">📊 PROFIT & LOSS</div>
+      <div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid #f0f5f2;font-size:12px;">
+        <span class="muted">Omset Penjualan</span><span style="font-weight:700;color:var(--g2);">+${fmt(omsetKotor)}</span>
       </div>
-    </div>
-
-    <!-- HPP -->
-    <div class="card mb8">
-      <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:10px;">🐟 HARGA POKOK PENJUALAN (HPP)</div>
-      ${hppDariBarangMasuk>0?`<div style="display:flex;justify-content:space-between;padding:4px 0;font-size:12px;border-bottom:1px solid #f0f5f2;"><span class="muted">📥 Pembelian Barang (Barang Masuk)</span><span style="color:var(--red);">− ${fmt(hppDariBarangMasuk)}</span></div>`:''}
+      ${hppDariBarangMasuk>0?`<div style="display:flex;justify-content:space-between;padding:4px 0;font-size:12px;border-bottom:1px solid #f0f5f2;">
+        <span class="muted">📥 HPP Pembelian Barang</span><span style="color:var(--red);">− ${fmt(hppDariBarangMasuk)}</span>
+      </div>`:''}
       ${plPengDetail(pengs, HPP_CATS)}
-      ${totalHPP===0?`<div class="empty" style="padding:12px;"><div class="empty-txt">Belum ada HPP — isi field "Total Biaya" saat input Barang Masuk</div></div>`:''}
-      <div style="display:flex;justify-content:space-between;padding:6px 0;font-weight:700;font-size:13px;border-top:1px solid var(--border);margin-top:4px;color:var(--red);">
-        <span>Total HPP</span><span>− ${fmt(totalHPP)}</span>
+      <div style="display:flex;justify-content:space-between;padding:6px 12px;background:${grossProfit>=0?'var(--gpale)':'var(--redpale)'};border-radius:8px;font-weight:800;font-size:13px;margin:6px 0;">
+        <span>= Gross Profit</span><span style="color:${grossProfit>=0?'var(--g2)':'var(--red)'};">${grossProfit>=0?'+':''}${fmt(grossProfit)} (${grossMargin}%)</span>
       </div>
-      <div style="display:flex;justify-content:space-between;padding:6px 12px;background:${grossProfit>=0?'var(--gpale)':'var(--redpale)'};border-radius:8px;font-weight:800;font-size:13px;margin-top:6px;">
-        <span>Gross Profit</span><span style="color:${grossProfit>=0?'var(--g2)':'var(--red)'};">${grossProfit>=0?'+':''}${fmt(grossProfit)} (${grossMargin}%)</span>
-      </div>
-    </div>
-
-    <!-- OPEX -->
-    <div class="card mb8">
-      <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:10px;">⚙️ BIAYA OPERASIONAL (OPEX)</div>
       ${plPengDetail(pengs, OPEX_CATS)}
-      ${totalOPEX===0?`<div class="empty" style="padding:12px;"><div class="empty-txt">Belum ada pengeluaran OPEX</div></div>`:''}
-      <div style="display:flex;justify-content:space-between;padding:6px 0;font-weight:700;font-size:13px;border-top:1px solid var(--border);margin-top:4px;color:var(--red);">
-        <span>Total OPEX</span><span>− ${fmt(totalOPEX)}</span>
+      ${totalOPEX===0?`<div style="font-size:11px;color:var(--muted);padding:4px 0;">Belum ada OPEX</div>`:''}
+      <div style="display:flex;justify-content:space-between;padding:10px 12px;background:${netProfit>=0?'var(--g2)':'var(--red)'};color:white;border-radius:8px;font-weight:800;font-size:14px;margin-top:6px;">
+        <span>= Net Profit</span><span>${netProfit>=0?'+':''}${fmt(netProfit)} (${netMargin}%)</span>
       </div>
     </div>
 
     <!-- CAPEX -->
     <div class="card mb8">
-      <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:10px;">🏪 ASET (CAPEX)</div>
+      <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px;">🏪 PENGELUARAN MODAL (CAPEX)</div>
+      <div style="font-size:11px;color:var(--muted);margin-bottom:8px;">Pembelian aset — tidak dikurangi dari Net Profit</div>
       ${plPengDetail(pengs, CAPEX_CATS)}
-      ${totalCAPEX===0?`<div class="empty" style="padding:12px;"><div class="empty-txt">Belum ada pengeluaran CAPEX</div></div>`:''}
-      <div style="display:flex;justify-content:space-between;padding:6px 0;font-weight:700;font-size:13px;border-top:1px solid var(--border);margin-top:4px;color:var(--red);">
+      ${totalCAPEX===0?`<div style="font-size:11px;color:var(--muted);padding:4px 0;">Belum ada CAPEX</div>`:''}
+      <div style="display:flex;justify-content:space-between;padding:6px 0;font-weight:700;font-size:13px;border-top:1px solid var(--border);margin-top:4px;color:var(--muted);">
         <span>Total CAPEX</span><span>− ${fmt(totalCAPEX)}</span>
       </div>
     </div>
 
-    <!-- SUMMARY -->
-    <div class="card mb8" style="background:#f8faf9;">
-      <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:10px;">📊 RINGKASAN P&L</div>
-      ${plRow('Uang Masuk Rekening', totalPenjualan)}
-      ${plRow('HPP', -totalHPP, 'var(--red)')}
-      <div style="display:flex;justify-content:space-between;padding:6px 0;font-weight:700;font-size:13px;color:${grossProfit>=0?'var(--g3)':'var(--red)'};">
-        <span>= Gross Profit</span><span>${grossProfit>=0?'+':''}${fmt(grossProfit)}</span>
+    <!-- CASH FLOW -->
+    <div class="card mb8">
+      <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:10px;">💳 CASH FLOW</div>
+      <div style="font-size:11px;font-weight:600;color:var(--g3);margin-bottom:4px;">MASUK</div>
+      <div style="display:flex;justify-content:space-between;padding:4px 0;font-size:12px;border-bottom:1px solid #f0f5f2;"><span class="muted">Omset Penjualan</span><span>+${fmt(omsetKotor)}</span></div>
+      ${totalInvestasi>0?`<div style="display:flex;justify-content:space-between;padding:4px 0;font-size:12px;border-bottom:1px solid #f0f5f2;"><span class="muted">💼 Investasi</span><span>+${fmt(totalInvestasi)}</span></div>`:''}
+      ${totalPinjaman>0?`<div style="display:flex;justify-content:space-between;padding:4px 0;font-size:12px;border-bottom:1px solid #f0f5f2;"><span class="muted">🏦 Pinjaman</span><span>+${fmt(totalPinjaman)}</span></div>`:''}
+      ${totalCashback>0?`<div style="display:flex;justify-content:space-between;padding:4px 0;font-size:12px;border-bottom:1px solid #f0f5f2;"><span class="muted">🎁 Cashback</span><span>+${fmt(totalCashback)}</span></div>`:''}
+      ${totalPmasLain>0?`<div style="display:flex;justify-content:space-between;padding:4px 0;font-size:12px;border-bottom:1px solid #f0f5f2;"><span class="muted">💰 Lainnya</span><span>+${fmt(totalPmasLain)}</span></div>`:''}
+      <div style="display:flex;justify-content:space-between;padding:5px 0;font-weight:700;font-size:12px;color:var(--g2);">
+        <span>Total Masuk</span><span>+${fmt(cashIn)}</span>
       </div>
-      ${plRow('OPEX', -totalOPEX, 'var(--red)')}
-      ${plRow('CAPEX', -totalCAPEX, 'var(--red)')}
-      <div style="display:flex;justify-content:space-between;padding:8px 12px;background:${netProfit>=0?'var(--g2)':'var(--red)'};color:white;border-radius:8px;font-weight:800;font-size:14px;margin-top:8px;">
-        <span>= Net Profit</span><span>${netProfit>=0?'+':''}${fmt(netProfit)}</span>
+      <div style="height:1px;background:var(--border);margin:8px 0;"></div>
+      <div style="font-size:11px;font-weight:600;color:var(--red);margin-bottom:4px;">KELUAR</div>
+      <div style="display:flex;justify-content:space-between;padding:4px 0;font-size:12px;border-bottom:1px solid #f0f5f2;"><span class="muted">HPP</span><span style="color:var(--red);">− ${fmt(totalHPP)}</span></div>
+      <div style="display:flex;justify-content:space-between;padding:4px 0;font-size:12px;border-bottom:1px solid #f0f5f2;"><span class="muted">OPEX</span><span style="color:var(--red);">− ${fmt(totalOPEX)}</span></div>
+      ${totalCAPEX>0?`<div style="display:flex;justify-content:space-between;padding:4px 0;font-size:12px;border-bottom:1px solid #f0f5f2;"><span class="muted">CAPEX</span><span style="color:var(--red);">− ${fmt(totalCAPEX)}</span></div>`:''}
+      <div style="display:flex;justify-content:space-between;padding:5px 0;font-weight:700;font-size:12px;color:var(--red);">
+        <span>Total Keluar</span><span>− ${fmt(cashOut)}</span>
+      </div>
+      <div style="display:flex;justify-content:space-between;padding:8px 12px;background:${cashNet>=0?'var(--gpale)':'var(--redpale)'};border-radius:8px;font-weight:800;font-size:13px;margin-top:6px;color:${cashNet>=0?'var(--g2)':'var(--red)'};">
+        <span>Net Cash Flow</span><span>${cashNet>=0?'+':''}${fmt(cashNet)}</span>
       </div>
     </div>
 
     <!-- BEP & STOK -->
     <div class="card mb8">
       <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:10px;">🎯 BEP & POTENSI STOK</div>
-      <div style="font-size:12px;margin-bottom:10px;">
+      <div style="font-size:12px;">
         <div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid #f0f5f2;">
-          <span class="muted">Omset Penjualan (kotor)</span><span style="font-weight:700;">${fmt(omsetKotor)}</span>
+          <span class="muted">Omset saat ini</span><span style="font-weight:700;">${fmt(omsetKotor)}</span>
         </div>
         <div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid #f0f5f2;">
-          <span class="muted">Uang Masuk Rekening</span><span style="font-weight:700;color:var(--g2);">${fmt(totalPenjualan)}</span>
+          <span class="muted">Total biaya (HPP+OPEX)</span><span style="font-weight:700;">${fmt(totalBiaya)}</span>
         </div>
         <div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid #f0f5f2;">
-          <span class="muted">Total Biaya (HPP+OPEX+CAPEX)</span><span style="font-weight:700;">${fmt(totalBiaya)}</span>
-        </div>
-        <div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid #f0f5f2;">
-          <span class="muted">Sisa menuju BEP</span>
+          <span class="muted">Status BEP</span>
           <span style="font-weight:800;color:${isBEP?'var(--g2)':'var(--red)'};">${isBEP?'✅ Sudah BEP':'Kurang '+fmt(totalBiaya-omsetKotor)}</span>
         </div>
         <div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid #f0f5f2;">
-          <span class="muted">Nilai Stok di Gudang</span><span style="font-weight:700;color:var(--blue);">${fmt(nilaiStok)}</span>
+          <span class="muted">Uang masuk rekening</span><span style="font-weight:700;color:var(--blue);">${fmt(totalSetoran)}</span>
+        </div>
+        <div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid #f0f5f2;">
+          <span class="muted">Nilai stok di gudang</span><span style="font-weight:700;color:var(--blue);">${fmt(nilaiStok)}</span>
         </div>
         <div style="display:flex;justify-content:space-between;padding:5px 0;">
-          <span class="muted">Potensi jika stok habis terjual</span><span style="font-weight:800;color:var(--g2);">${fmt(omsetKotor+nilaiStok)}</span>
+          <span class="muted">Potensi jika stok terjual</span><span style="font-weight:800;color:var(--g2);">${fmt(omsetKotor+nilaiStok)}</span>
         </div>
       </div>
     </div>
@@ -2424,10 +2416,8 @@ function renderPL(){
     ${pmas.length?`<div style="margin-top:4px;"><div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.3px;margin-bottom:6px;">Riwayat Pemasukan Lain</div>
     ${pmas.map(p=>`<div class="card mb8" style="padding:10px 12px;">
       <div style="display:flex;justify-content:space-between;align-items:flex-start;">
-        <div>
-          <div style="font-weight:600;font-size:12px;">${KATEGORI_LABEL[p.kategori]||p.kategori}</div>
-          <div style="font-size:11px;color:var(--muted);">${fmtD(p.tanggal)} · ${p.keterangan||'—'}</div>
-        </div>
+        <div><div style="font-weight:600;font-size:12px;">${KATEGORI_LABEL[p.kategori]||p.kategori}</div>
+        <div style="font-size:11px;color:var(--muted);">${fmtD(p.tanggal)} · ${p.keterangan||'—'}</div></div>
         <div style="display:flex;align-items:center;gap:6px;">
           <span style="font-weight:800;color:var(--g2);">+ ${fmt(p.jumlah)}</span>
           <button class="btn btn-sm btn-outline" style="padding:4px 7px;" onclick="openEditPmas('${p.id||p._key}')">✏️</button>
@@ -2440,10 +2430,8 @@ function renderPL(){
     ${pengs.length?pengs.map(p=>`
       <div class="card mb8" style="padding:10px 12px;">
         <div style="display:flex;justify-content:space-between;align-items:flex-start;">
-          <div>
-            <div style="font-weight:600;font-size:12px;">${KATEGORI_LABEL[p.kategori]||p.kategori}</div>
-            <div style="font-size:11px;color:var(--muted);">${fmtD(p.tanggal)} · ${p.keterangan||'—'}</div>
-          </div>
+          <div><div style="font-weight:600;font-size:12px;">${KATEGORI_LABEL[p.kategori]||p.kategori}</div>
+          <div style="font-size:11px;color:var(--muted);">${fmtD(p.tanggal)} · ${p.keterangan||'—'}</div></div>
           <div style="display:flex;align-items:center;gap:6px;">
             <span style="font-weight:800;color:var(--red);">− ${fmt(p.jumlah)}</span>
             <button class="btn btn-sm btn-outline" style="padding:4px 7px;" onclick="openEditPengeluaran('${p.id||p._key}')">✏️</button>
@@ -2451,6 +2439,10 @@ function renderPL(){
         </div>
       </div>`).join(''):`<div class="empty"><div class="empty-txt">Belum ada pengeluaran di periode ini</div></div>`}
     </div>`;
+  }catch(e){
+    console.error('renderPL error:', e);
+    document.getElementById('pl-content').innerHTML=`<div class="empty"><div class="empty-icon">⚠️</div><div class="empty-txt">Error: ${e.message}</div></div>`;
+  }
 }
 window.renderPL=renderPL;
 
@@ -3105,7 +3097,7 @@ var SESSION_KEY = 'izzan_session';
 
 function checkSession(){
   try{
-    var s = sessionStorage.getItem(SESSION_KEY);
+    var s = localStorage.getItem(SESSION_KEY) || sessionStorage.getItem(SESSION_KEY);
     if(s){ var d=JSON.parse(s); if(d&&d.user&&USERS[d.user]) return d; }
   }catch(e){}
   return null;
@@ -3117,7 +3109,9 @@ function doLogin(){
   var err  = document.getElementById('login-error');
   err.style.display='none';
   if(USERS[user] && USERS[user].pass===pass){
-    sessionStorage.setItem(SESSION_KEY, JSON.stringify({user:user, role:USERS[user].role}));
+    var data = JSON.stringify({user:user, role:USERS[user].role});
+    localStorage.setItem(SESSION_KEY, data);
+    sessionStorage.setItem(SESSION_KEY, data);
     showApp(user, USERS[user].role);
   } else {
     err.style.display='block';
@@ -3129,12 +3123,12 @@ function doLogin(){
 function showApp(user, role){
   document.getElementById('login-screen').style.display='none';
   document.getElementById('app-wrapper').style.display='block';
-  // Tampilkan role di topbar kanan
   var el = document.getElementById('topbar-user');
   if(el) el.textContent = role;
 }
 
 function doLogout(){
+  localStorage.removeItem(SESSION_KEY);
   sessionStorage.removeItem(SESSION_KEY);
   location.reload();
 }
