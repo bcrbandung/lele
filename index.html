@@ -722,6 +722,27 @@ tr:last-child td{border-bottom:none;}
   </div>
 </div>
 
+<!-- MODAL EDIT PEMASUKAN LAIN -->
+<div class="mo" id="mo-edit-pmas">
+  <div class="mo-box">
+    <div class="mo-hdr"><div class="mo-title">✏️ Edit Pemasukan Lain</div><button class="mo-close" onclick="closeModal('mo-edit-pmas')">✕</button></div>
+    <input type="hidden" id="edit-pmas-id">
+    <div class="fg"><label class="fl">Tanggal</label><input type="date" class="fc" id="edit-pmas-tgl"></div>
+    <div class="fg"><label class="fl">Kategori</label>
+      <select class="fc" id="edit-pmas-kategori">
+        <option value="investasi">💼 Investasi dari Investor</option>
+        <option value="pinjaman">🏦 Pinjaman / Modal</option>
+        <option value="cashback">🎁 Cashback dari Supplier</option>
+        <option value="lain">💰 Pemasukan Lainnya</option>
+      </select>
+    </div>
+    <div class="fg"><label class="fl">Keterangan</label><input type="text" class="fc" id="edit-pmas-ket"></div>
+    <div class="fg"><label class="fl">Jumlah</label><div class="input-group"><div class="ia">Rp</div><input type="number" class="fc" id="edit-pmas-jumlah"></div></div>
+    <button class="btn btn-primary btn-full" onclick="simpanEditPmas()">💾 Simpan</button>
+    <button class="btn btn-red btn-full" style="margin-top:6px;" onclick="hapusPmas()">🗑️ Hapus</button>
+  </div>
+</div>
+
 <!-- MODAL EDIT PENGELUARAN -->
 <div class="mo" id="mo-edit-peng">
   <div class="mo-box">
@@ -931,6 +952,9 @@ var simpanPemasukanLain = _loading;
 var simpanEditPengeluaran = _loading;
 var hapusPengeluaran = _loading;
 var openEditPengeluaran = function(id){};
+var openEditPmas = function(id){};
+var simpanEditPmas = _loading;
+var hapusPmas = _loading;
 var simpanLunas = function(){};
 var openEditPb = function(id){};
 var simpanEditPb = function(){};
@@ -2395,7 +2419,23 @@ function renderPL(){
     </div>
 
     <button class="btn btn-outline btn-full" onclick="openModal('mo-pengeluaran')" style="margin-bottom:6px;">+ Catat Pengeluaran</button>
-    <button class="btn btn-outline btn-full" onclick="openModal('mo-pemasukan-lain')">+ Catat Pemasukan Lain</button>
+    <button class="btn btn-outline btn-full" onclick="openModal('mo-pemasukan-lain')" style="margin-bottom:10px;">+ Catat Pemasukan Lain</button>
+
+    ${pmas.length?`<div style="margin-top:4px;"><div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.3px;margin-bottom:6px;">Riwayat Pemasukan Lain</div>
+    ${pmas.map(p=>`<div class="card mb8" style="padding:10px 12px;">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;">
+        <div>
+          <div style="font-weight:600;font-size:12px;">${KATEGORI_LABEL[p.kategori]||p.kategori}</div>
+          <div style="font-size:11px;color:var(--muted);">${fmtD(p.tanggal)} · ${p.keterangan||'—'}</div>
+        </div>
+        <div style="display:flex;align-items:center;gap:6px;">
+          <span style="font-weight:800;color:var(--g2);">+ ${fmt(p.jumlah)}</span>
+          <button class="btn btn-sm btn-outline" style="padding:4px 7px;" onclick="openEditPmas('${p.id||p._key}')">✏️</button>
+        </div>
+      </div>
+    </div>`).join('')}
+    </div>`:''}
+
     <div style="margin-top:10px;"><div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.3px;margin-bottom:6px;">Riwayat Pengeluaran</div>
     ${pengs.length?pengs.map(p=>`
       <div class="card mb8" style="padding:10px 12px;">
@@ -2474,8 +2514,45 @@ window.simpanPemasukanLain=simpanPemasukanLain;
 
 // Edit pengeluaran
 let currentEditPengId=null;
+// Edit pemasukan lain
+let currentEditPmasId = null;
+window.openEditPmas = function(id){
+  currentEditPmasId = id;
+  const key = STATE.pmasukanLain[id] ? id : Object.keys(STATE.pmasukanLain||{}).find(k=>STATE.pmasukanLain[k].id===id)||id;
+  const p = STATE.pmasukanLain[key];
+  if(!p) return;
+  document.getElementById('edit-pmas-tgl').value = p.tanggal||today();
+  document.getElementById('edit-pmas-kategori').value = p.kategori||'lain';
+  document.getElementById('edit-pmas-ket').value = p.keterangan||'';
+  document.getElementById('edit-pmas-jumlah').value = p.jumlah||0;
+  openModal('mo-edit-pmas');
+};
+async function simpanEditPmas(){
+  const jml = parseInt(document.getElementById('edit-pmas-jumlah').value)||0;
+  if(!jml){alert('Jumlah wajib!');return;}
+  const key = STATE.pmasukanLain[currentEditPmasId] ? currentEditPmasId : Object.keys(STATE.pmasukanLain||{}).find(k=>STATE.pmasukanLain[k].id===currentEditPmasId)||currentEditPmasId;
+  setSyncStatus('syncing');
+  try{
+    await update(ref(db,`pmasukanLain/${key}`),{
+      tanggal: document.getElementById('edit-pmas-tgl').value,
+      kategori: document.getElementById('edit-pmas-kategori').value,
+      keterangan: document.getElementById('edit-pmas-ket').value.trim(),
+      jumlah: jml
+    });
+    setSyncStatus(''); closeModal('mo-edit-pmas');
+  }catch(e){setSyncStatus('offline');alert('Gagal: '+e.message);}
+}
+window.simpanEditPmas=simpanEditPmas;
+async function hapusPmas(){
+  if(!confirm('Hapus pemasukan ini?')) return;
+  const key = STATE.pmasukanLain[currentEditPmasId] ? currentEditPmasId : Object.keys(STATE.pmasukanLain||{}).find(k=>STATE.pmasukanLain[k].id===currentEditPmasId)||currentEditPmasId;
+  setSyncStatus('syncing');
+  try{ await remove(ref(db,`pmasukanLain/${key}`)); setSyncStatus(''); closeModal('mo-edit-pmas'); }
+  catch(e){setSyncStatus('offline');alert('Gagal: '+e.message);}
+}
+window.hapusPmas=hapusPmas;
+
 window.openEditPengeluaran=function(id){
-  currentEditPengId=id;
   const p=STATE.pengeluaran[id]||Object.values(STATE.pengeluaran||{}).find(x=>x.id===id);
   if(!p) return;
   document.getElementById('edit-peng-id').value=id;
