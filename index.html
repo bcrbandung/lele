@@ -2251,8 +2251,9 @@ function renderPL(){
   if(plPeriod==='custom' && (!dari||!sampai)){ c.innerHTML=`<div class="empty"><div class="empty-txt">Pilih rentang tanggal</div></div>`; return; }
 
   // === PEMASUKAN ===
-  const incomes = getIncomeTx().filter(t=>inRange(t.tanggalEfektif, dari, sampai));
-  const totalPenjualan = incomes.reduce((s,t)=>s+(t.totalEfektif||0),0);
+  // Penjualan = uang yang benar-benar sudah disetor/masuk rekening (dari Kas)
+  const setoran = getSetoranArray().filter(t=>inRange(t.tanggal, dari, sampai));
+  const totalPenjualan = setoran.reduce((s,t)=>s+(t.jumlahAktual||0), 0);
 
   const pmas = getPmasArray().filter(t=>inRange(t.tanggal, dari, sampai));
   const totalInvestasi = pmas.filter(t=>t.kategori==='investasi').reduce((s,t)=>s+t.jumlah,0);
@@ -2276,17 +2277,18 @@ function renderPL(){
   const totalOPEX   = pengs.filter(t=>OPEX_CATS.includes(t.kategori)).reduce((s,t)=>s+t.jumlah,0);
 
   // === KALKULASI ===
-  const grossProfit   = totalPenjualan - totalHPP;
-  const grossMargin   = totalPenjualan>0 ? (grossProfit/totalPenjualan*100).toFixed(1) : 0;
+  const grossProfit   = omsetKotor - totalHPP;
+  const grossMargin   = omsetKotor>0 ? (grossProfit/omsetKotor*100).toFixed(1) : 0;
   const netProfit     = grossProfit - totalOPEX - totalCAPEX;
-  const netMargin     = totalPenjualan>0 ? (netProfit/totalPenjualan*100).toFixed(1) : 0;
+  const netMargin     = omsetKotor>0 ? (netProfit/omsetKotor*100).toFixed(1) : 0;
   const totalBiaya    = totalHPP + totalOPEX + totalCAPEX;
   const cashIn        = totalPenjualan + totalInvestasi + totalPinjaman + totalCashback + totalPmasLain;
   const cashOut       = totalBiaya;
   const cashNet       = cashIn - cashOut;
   const isBEP        = netProfit >= 0;
 
-  // Nilai stok saat ini
+  // Omset kotor untuk referensi & potensi stok
+  const omsetKotor = getIncomeTx().filter(t=>inRange(t.tanggalEfektif, dari, sampai)).reduce((s,t)=>s+(t.totalEfektif||0),0);
   const nilaiStok = PRODS.reduce((s,p)=>s+(STATE.stok[p.id]||0)*p.price, 0);
 
   // === RENDER ===
@@ -2305,7 +2307,7 @@ function renderPL(){
     <!-- PEMASUKAN -->
     <div class="card mb8">
       <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:10px;">📈 PEMASUKAN</div>
-      ${plRow('Penjualan', totalPenjualan, 'var(--g2)', true)}
+      ${plRow('Uang Masuk Rekening (Setoran)', totalPenjualan, 'var(--g2)', true)}
       ${totalInvestasi>0?plRow('Investasi', totalInvestasi, 'var(--blue)'):''}
       ${totalPinjaman>0?plRow('Pinjaman', totalPinjaman, 'var(--blue)'):''}
       ${totalCashback>0?plRow('Cashback', totalCashback, 'var(--g3)'):''}
@@ -2352,7 +2354,7 @@ function renderPL(){
     <!-- SUMMARY -->
     <div class="card mb8" style="background:#f8faf9;">
       <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:10px;">📊 RINGKASAN P&L</div>
-      ${plRow('Total Penjualan', totalPenjualan)}
+      ${plRow('Uang Masuk Rekening', totalPenjualan)}
       ${plRow('HPP', -totalHPP, 'var(--red)')}
       <div style="display:flex;justify-content:space-between;padding:6px 0;font-weight:700;font-size:13px;color:${grossProfit>=0?'var(--g3)':'var(--red)'};">
         <span>= Gross Profit</span><span>${grossProfit>=0?'+':''}${fmt(grossProfit)}</span>
@@ -2369,20 +2371,23 @@ function renderPL(){
       <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:10px;">🎯 BEP & POTENSI STOK</div>
       <div style="font-size:12px;margin-bottom:10px;">
         <div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid #f0f5f2;">
+          <span class="muted">Omset Penjualan (kotor)</span><span style="font-weight:700;">${fmt(omsetKotor)}</span>
+        </div>
+        <div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid #f0f5f2;">
+          <span class="muted">Uang Masuk Rekening</span><span style="font-weight:700;color:var(--g2);">${fmt(totalPenjualan)}</span>
+        </div>
+        <div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid #f0f5f2;">
           <span class="muted">Total Biaya (HPP+OPEX+CAPEX)</span><span style="font-weight:700;">${fmt(totalBiaya)}</span>
         </div>
         <div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid #f0f5f2;">
-          <span class="muted">Total Penjualan</span><span style="font-weight:700;">${fmt(totalPenjualan)}</span>
-        </div>
-        <div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid #f0f5f2;">
           <span class="muted">Sisa menuju BEP</span>
-          <span style="font-weight:800;color:${isBEP?'var(--g2)':'var(--red)'};">${isBEP?'✅ Sudah BEP':'Kurang '+fmt(totalBiaya-totalPenjualan)}</span>
+          <span style="font-weight:800;color:${isBEP?'var(--g2)':'var(--red)'};">${isBEP?'✅ Sudah BEP':'Kurang '+fmt(totalBiaya-omsetKotor)}</span>
         </div>
         <div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid #f0f5f2;">
           <span class="muted">Nilai Stok di Gudang</span><span style="font-weight:700;color:var(--blue);">${fmt(nilaiStok)}</span>
         </div>
         <div style="display:flex;justify-content:space-between;padding:5px 0;">
-          <span class="muted">Potensi jika stok habis terjual</span><span style="font-weight:800;color:var(--g2);">${fmt(totalPenjualan+nilaiStok)}</span>
+          <span class="muted">Potensi jika stok habis terjual</span><span style="font-weight:800;color:var(--g2);">${fmt(omsetKotor+nilaiStok)}</span>
         </div>
       </div>
     </div>
