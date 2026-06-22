@@ -558,10 +558,41 @@ tr:last-child td{border-bottom:none;}
       <div class="fg" style="margin-bottom:0"><label class="fl">Tanggal</label><input type="date" class="fc" id="m-tgl"></div>
       <div class="fg" style="margin-bottom:0"><label class="fl">Tipe</label><select class="fc" id="m-tipe"><option value="pembelian">📦 Pembelian</option><option value="retur">↩️ Retur</option></select></div>
     </div>
-    <div class="fg"><label class="fl">Supplier / Keterangan</label><input type="text" class="fc" id="m-supplier" placeholder="Nama supplier"></div>
-    <div class="fg"><label class="fl">Produk & Jumlah</label><div id="m-items"></div><button onclick="addRow('m-items','masuk')" class="btn btn-sm btn-outline mt8">+ Produk</button></div>
-    <div class="fg"><label class="fl">Total Biaya (opsional)</label><div class="input-group"><div class="ia">Rp</div><input type="number" class="fc" id="m-biaya" placeholder="0"></div></div>
+    <div class="fg"><label class="fl">Supplier</label><input type="text" class="fc" id="m-supplier" placeholder="Nama supplier"></div>
+    <div class="fg">
+      <label class="fl">Produk & Jumlah</label>
+      <div id="m-items"></div>
+      <button onclick="addRow('m-items','masuk')" class="btn btn-sm btn-outline mt8">+ Produk</button>
+    </div>
+    <div class="fg">
+      <label class="fl">Diskon Supplier (opsional)</label>
+      <div class="form-row">
+        <div class="input-group">
+          <div class="ia">Rp</div>
+          <input type="number" class="fc" id="m-diskon-rp" placeholder="0" min="0" oninput="syncMasukDiskonRp()">
+        </div>
+        <div class="input-group">
+          <input type="number" class="fc" id="m-diskon-pct" placeholder="%" min="0" max="100" oninput="syncMasukDiskonPct()" style="border-radius:8px 0 0 8px;">
+          <div class="ia" style="border-left:none;border-radius:0 8px 8px 0;">%</div>
+        </div>
+      </div>
+    </div>
+    <div class="fg">
+      <label class="fl">Metode Bayar ke Supplier</label>
+      <div class="pay-group" id="m-pay-group">
+        <button class="pay-pill active" data-pay="tunai" onclick="selectPay(this,'m-pay-group')">💵 Tunai</button>
+        <button class="pay-pill" data-pay="transfer" onclick="selectPay(this,'m-pay-group')">🏦 Transfer</button>
+        <button class="pay-pill hutang" data-pay="hutang" onclick="selectPay(this,'m-pay-group')">📒 Hutang</button>
+        <button class="pay-pill" data-pay="qris" onclick="selectPay(this,'m-pay-group')">📱 QRIS</button>
+      </div>
+    </div>
     <div class="fg"><label class="fl">Catatan</label><input type="text" class="fc" id="m-catatan" placeholder="Opsional"></div>
+    <!-- SUMMARY -->
+    <div class="sum-box" style="background:#fff3cd;">
+      <div class="sum-row"><span class="muted">Subtotal HPP</span><span id="m-subtotal">Rp 0</span></div>
+      <div class="sum-row" id="m-diskon-row" style="display:none;"><span class="muted" style="color:var(--g3);">Diskon Supplier</span><span id="m-diskon-display" style="color:var(--g3);">− Rp 0</span></div>
+      <div class="sum-total" style="background:#92400e;"><span>Total Bayar ke Supplier</span><span id="m-total-display">Rp 0</span></div>
+    </div>
     <button class="btn btn-primary btn-full" onclick="simpanMasuk()">💾 Simpan</button>
   </div>
 </div>
@@ -934,9 +965,12 @@ var showSuggest = function(){};
 var pickSuggest = function(nama,hp,inputId,kontakId,suggestId){ var i=document.getElementById(inputId); var k=document.getElementById(kontakId); var b=document.getElementById(suggestId); if(i)i.value=nama; if(k&&hp)k.value=hp; if(b)b.style.display='none'; };
 var calcJual = function(){};
 var calcBooking = function(){};
+var calcMasuk = function(){ return {subtotal:0,diskonRp:0,total:0}; };
 var calcBiayaMasuk = function(){};
 var syncDiskonRp = function(){};
 var syncDiskonPct = function(){};
+var syncMasukDiskonRp = function(){};
+var syncMasukDiskonPct = function(){};
 var calcRekon = function(){};
 var calcEdit = function(){};
 var loadRekon = function(){};
@@ -1144,7 +1178,14 @@ function initModal(id){
   }
   if(id==='mo-masuk'){
     document.getElementById('m-tgl').value=today();
-    ['m-supplier','m-biaya','m-catatan'].forEach(i=>document.getElementById(i).value='');
+    ['m-supplier','m-catatan'].forEach(i=>document.getElementById(i).value='');
+    document.getElementById('m-diskon-rp').value='';
+    document.getElementById('m-diskon-pct').value='';
+    document.getElementById('m-subtotal').textContent='Rp 0';
+    document.getElementById('m-total-display').textContent='Rp 0';
+    document.getElementById('m-diskon-row').style.display='none';
+    document.querySelectorAll('#m-pay-group .pay-pill').forEach(p=>p.classList.remove('active'));
+    document.querySelector('#m-pay-group .pay-pill[data-pay="tunai"]').classList.add('active');
     document.getElementById('m-items').innerHTML=''; addRow('m-items','masuk');
   }
   if(id==='mo-booking'){
@@ -1303,25 +1344,66 @@ function addRow(cid,type){
   const div=document.createElement('div'); div.className='item-row';
   const isCalc=type==='jual'||type==='booking';
   const isMasuk=type==='masuk';
-  const cb=isCalc?' onchange="'+(type==='jual'?'calcJual':'calcBooking')+'()"':isMasuk?' onchange="calcBiayaMasuk()"':'';
-  const ib=isCalc?' oninput="'+(type==='jual'?'calcJual':'calcBooking')+'()"':isMasuk?' oninput="calcBiayaMasuk()"':'';
-  div.innerHTML=`<select class="fc"${cb}>${prodOpts()}</select><input type="number" class="fc" placeholder="Qty" min="1" value="1"${ib}><button class="del-btn" onclick="this.closest('.item-row').remove();${isCalc?(type==='jual'?'calcJual':'calcBooking')+'();':isMasuk?'calcBiayaMasuk();':''}">✕</button>`;
+  const cb=isCalc?' onchange="'+(type==='jual'?'calcJual':'calcBooking')+'()"':isMasuk?' onchange="calcMasuk()"':'';
+  const ib=isCalc?' oninput="'+(type==='jual'?'calcJual':'calcBooking')+'()"':isMasuk?' oninput="calcMasuk()"':'';
+  div.innerHTML=`<select class="fc"${cb}>${prodOpts()}</select><input type="number" class="fc" placeholder="Qty" min="1" value="1"${ib}><button class="del-btn" onclick="this.closest('.item-row').remove();${isCalc?(type==='jual'?'calcJual':'calcBooking')+'();':isMasuk?'calcMasuk();':''}">✕</button>`;
   c.appendChild(div);
 }
 window.addRow=addRow;
 
-function calcBiayaMasuk(){
-  let totalBiaya=0;
+function calcMasuk(){
+  let subtotal=0;
   document.querySelectorAll('#m-items .item-row').forEach(row=>{
     const pid=row.querySelector('select').value;
     const qty=parseInt(row.querySelector('input').value)||0;
     if(!pid||!qty) return;
     const p=PRODS.find(x=>x.id===pid);
-    if(p && p.hargaBeli) totalBiaya+=p.hargaBeli*qty;
+    if(p) subtotal+=( p.hargaBeli||0)*qty;
   });
-  if(totalBiaya>0) document.getElementById('m-biaya').value=totalBiaya;
+  const diskonRp=parseInt(document.getElementById('m-diskon-rp')?.value)||0;
+  const total=Math.max(0,subtotal-diskonRp);
+  const subEl=document.getElementById('m-subtotal');
+  const totEl=document.getElementById('m-total-display');
+  const drow=document.getElementById('m-diskon-row');
+  const ddisp=document.getElementById('m-diskon-display');
+  if(subEl) subEl.textContent=fmt(subtotal);
+  if(totEl) totEl.textContent=fmt(total);
+  if(drow) drow.style.display=diskonRp>0?'flex':'none';
+  if(ddisp) ddisp.textContent='− '+fmt(diskonRp);
+  // Auto-fill biaya (hidden field for backward compat)
+  const bEl=document.getElementById('m-biaya');
+  if(bEl) bEl.value=total;
+  return {subtotal, diskonRp, total};
 }
-window.calcBiayaMasuk=calcBiayaMasuk;
+window.calcMasuk=calcMasuk;
+
+function syncMasukDiskonRp(){
+  const sub=getMasukSubtotal();
+  const rp=parseInt(document.getElementById('m-diskon-rp').value)||0;
+  const pEl=document.getElementById('m-diskon-pct');
+  if(sub>0&&pEl) pEl.value=rp>0?(rp/sub*100).toFixed(1):'';
+  calcMasuk();
+}
+window.syncMasukDiskonRp=syncMasukDiskonRp;
+
+function syncMasukDiskonPct(){
+  const sub=getMasukSubtotal();
+  const pct=parseFloat(document.getElementById('m-diskon-pct').value)||0;
+  const rEl=document.getElementById('m-diskon-rp');
+  if(rEl) rEl.value=pct>0?Math.round(sub*pct/100):'';
+  calcMasuk();
+}
+window.syncMasukDiskonPct=syncMasukDiskonPct;
+
+function getMasukSubtotal(){
+  return Array.from(document.querySelectorAll('#m-items .item-row')).reduce((s,row)=>{
+    const pid=row.querySelector('select').value;
+    const qty=parseInt(row.querySelector('input').value)||0;
+    if(!pid||!qty) return s;
+    const p=PRODS.find(x=>x.id===pid);
+    return s+(p?( p.hargaBeli||0)*qty:0);
+  },0);
+}
 
 function calcTotal(containerId){
   let total=0,items=0;
@@ -1439,17 +1521,33 @@ async function simpanMasuk(){
   const tgl=document.getElementById('m-tgl').value;
   const tipe=document.getElementById('m-tipe').value;
   const supplier=document.getElementById('m-supplier').value.trim()||'-';
-  const biaya=parseInt(document.getElementById('m-biaya').value)||0;
   const catatan=document.getElementById('m-catatan').value.trim();
-  const items=getItemsFromContainer('m-items');
-  if(!items||!items.length){alert('Lengkapi produk!');return;}
+  const metodeBayar=getActivePay('m-pay-group');
+
+  const items=[]; let ok=true;
+  document.querySelectorAll('#m-items .item-row').forEach(row=>{
+    const pid=row.querySelector('select').value;
+    const qty=parseInt(row.querySelector('input').value)||0;
+    if(!pid||qty<1){ok=false;return;}
+    const p=PRODS.find(x=>x.id===pid);
+    items.push({prodId:pid,qty,hargaBeli:p?p.hargaBeli||0:0,nama:p?p.name:pid});
+  });
+  if(!ok||!items.length){alert('Lengkapi data produk!');return;}
+
+  const r=calcMasuk();
+  const subtotal=r.subtotal, diskonRp=r.diskonRp, total=r.total;
+
   setSyncStatus('syncing');
   try{
     const id=genId();
-    const writes=[set(ref(db,`tx/${id}`),{id,tipe,tanggal:tgl,supplier,biaya,catatan,items,total:-biaya,createdAt:new Date().toISOString()})];
+    const tx={id,tipe,tanggal:tgl,supplier,catatan,items,
+      subtotal,diskon:diskonRp,biaya:total,total:-total,
+      metodeBayar,createdAt:new Date().toISOString()};
+    const writes=[set(ref(db,`tx/${id}`),tx)];
     items.forEach(i=>writes.push(set(ref(db,`stok/${i.prodId}`),(STATE.stok[i.prodId]||0)+i.qty)));
     await Promise.all(writes);
-    setSyncStatus(''); closeModal('mo-masuk'); alert('✅ Barang masuk dicatat!');
+    setSyncStatus(''); closeModal('mo-masuk');
+    alert('✅ Barang masuk dicatat!\nHPP: '+fmt(subtotal)+(diskonRp>0?' (diskon '+fmt(diskonRp)+')':'')+'\nTotal bayar: '+fmt(total));
   }catch(e){setSyncStatus('offline');alert('Gagal: '+e.message);}
 }
 window.simpanMasuk=simpanMasuk;
@@ -2476,10 +2574,11 @@ function renderPL(){
   // === PENGELUARAN ===
   const pengs = getPengArray().filter(t=>inRange(t.tanggal, dari, sampai));
 
-  // HPP otomatis dari Barang Masuk (tx tipe pembelian/retur yang punya biaya)
+  // HPP dari Barang Masuk — pakai subtotal (sebelum diskon supplier) sebagai HPP murni
+  // biaya = total bayar ke supplier (setelah diskon)
   const hppDariBarangMasuk = getTxArray()
-    .filter(t=>t.tipe==='pembelian' && t.biaya>0 && inRange(t.tanggal, dari, sampai))
-    .reduce((s,t)=>s+(t.biaya||0), 0);
+    .filter(t=>t.tipe==='pembelian' && inRange(t.tanggal, dari, sampai))
+    .reduce((s,t)=>s+(t.subtotal||t.biaya||0), 0);
 
   // HPP dari pengeluaran manual (kategori hpp/ongkir) — tetap dihitung kalau ada
   const hppDariPengeluaran = pengs.filter(t=>HPP_CATS.includes(t.kategori)).reduce((s,t)=>s+t.jumlah,0);
