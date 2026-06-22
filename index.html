@@ -476,11 +476,20 @@ tr:last-child td{border-bottom:none;}
 
 <!-- PAGE PEMBELI -->
 <div class="page" id="page-pembeli">
-  <div class="sh" style="margin-top:4px;">
-    <div class="sh-title">👥 Data Pembeli</div>
-    <button class="btn btn-sm btn-primary" onclick="openModal('mo-pb')">+ Tambah</button>
+  <div class="tabs" style="margin-top:4px;">
+    <button class="tab active" onclick="switchPembeliTab('top')" id="pbtab-top">🏆 Top Customer</button>
+    <button class="tab" onclick="switchPembeliTab('semua')" id="pbtab-semua">👥 Semua</button>
   </div>
-  <div id="list-pembeli"><div class="empty"><div class="empty-icon">👥</div><div class="empty-txt">Belum ada data pembeli</div></div></div>
+  <div id="pbv-top">
+    <div id="list-top-customer"></div>
+  </div>
+  <div id="pbv-semua" style="display:none;">
+    <div class="sh" style="margin-top:4px;">
+      <div class="sh-title"></div>
+      <button class="btn btn-sm btn-primary" onclick="openModal('mo-pb')">+ Tambah</button>
+    </div>
+    <div id="list-pembeli"><div class="empty"><div class="empty-icon">👥</div><div class="empty-txt">Belum ada data pembeli</div></div></div>
+  </div>
 </div>
 
 <!-- BOTTOM NAV -->
@@ -955,6 +964,9 @@ var openEditPengeluaran = function(id){};
 var openEditPmas = function(id){};
 var simpanEditPmas = _loading;
 var hapusPmas = _loading;
+var switchPembeliTab = function(t){};
+var toggleShowAllTop = function(){};
+var renderTopCustomer = function(){};
 var simpanLunas = function(){};
 var openEditPb = function(id){};
 var simpanEditPb = function(){};
@@ -1037,7 +1049,7 @@ function renderPage(pid){
   if(pid==='page-stok') renderGudang();
   if(pid==='page-booking') renderBookingList();
   if(pid==='page-laporan') { const at=document.querySelector('[id^=ltab-].active'); switchLap(at?at.id.replace('ltab-',''):'transaksi',true); }
-  if(pid==='page-pembeli') renderPembeli();
+  if(pid==='page-pembeli') { renderTopCustomer(); renderPembeli(); }
 }
 
 // ======================== MODAL
@@ -2228,7 +2240,112 @@ function renderKasHistory(){
 }
 window.renderKasHistory=renderKasHistory;
 
-// ======================== P&L
+// ======================== TOP CUSTOMER
+let showAllTop = false;
+
+function switchPembeliTab(tab){
+  ['top','semua'].forEach(t=>{
+    document.getElementById('pbv-'+t).style.display=t===tab?'block':'none';
+    document.getElementById('pbtab-'+t).classList.toggle('active',t===tab);
+  });
+  if(tab==='top') renderTopCustomer();
+  if(tab==='semua') renderPembeli();
+}
+window.switchPembeliTab=switchPembeliTab;
+
+function renderTopCustomer(){
+  const c = document.getElementById('list-top-customer');
+  if(!c) return;
+
+  // Hitung total per pembeli dari getIncomeTx
+  const byPembeli = {};
+  getIncomeTx().forEach(t=>{
+    const nama = (t.pembeli||'').trim();
+    if(!nama || nama==='Umum') return;
+    if(!byPembeli[nama]) byPembeli[nama]={nama, total:0, count:0, items:[]};
+    byPembeli[nama].total += t.totalEfektif||0;
+    byPembeli[nama].count++;
+    if(t.items) t.items.forEach(i=>{
+      const existing = byPembeli[nama].items.find(x=>x.prodId===i.prodId);
+      if(existing) existing.qty += i.qty||i.terjual||0;
+      else byPembeli[nama].items.push({prodId:i.prodId, nama:i.nama, qty:i.qty||i.terjual||0});
+    });
+  });
+
+  // Tambahkan data kontak dari STATE.pembeli
+  Object.values(STATE.pembeli||{}).forEach(p=>{
+    const key = (p.nama||'').trim();
+    if(byPembeli[key]) byPembeli[key].hp = p.hp||'';
+  });
+
+  const sorted = Object.values(byPembeli).sort((a,b)=>b.total-a.total);
+  const totalAll = sorted.reduce((s,p)=>s+p.total, 0);
+
+  if(!sorted.length){
+    c.innerHTML=`<div class="empty"><div class="empty-icon">🏆</div><div class="empty-txt">Belum ada data transaksi</div></div>`;
+    return;
+  }
+
+  const display = showAllTop ? sorted : sorted.slice(0,10);
+  const medals = ['🥇','🥈','🥉'];
+
+  c.innerHTML = `
+    <div class="card mb8" style="background:var(--g2);color:white;padding:12px 16px;">
+      <div style="font-size:11px;opacity:0.7;margin-bottom:2px;">TOTAL OMSET ALL CUSTOMER</div>
+      <div style="font-size:22px;font-weight:800;">${fmt(totalAll)}</div>
+      <div style="font-size:11px;opacity:0.65;margin-top:2px;">${sorted.length} customer aktif</div>
+    </div>` +
+    display.map((p, idx)=>{
+      const rank = idx+1;
+      const pct = totalAll>0 ? (p.total/totalAll*100).toFixed(1) : 0;
+      const medal = medals[idx]||`<span style="font-weight:800;color:var(--muted);">#${rank}</span>`;
+      const topProd = p.items.sort((a,b)=>b.qty-a.qty)[0];
+      const hutang = getPiutangArray().filter(h=>(h.pembeli||'').trim()===p.nama&&h.status==='belum').reduce((s,h)=>s+h.total,0);
+      const pbData = Object.values(STATE.pembeli||{}).find(x=>(x.nama||'').trim()===p.nama);
+      const pbKey = pbData ? (Object.keys(STATE.pembeli||{}).find(k=>STATE.pembeli[k].id===pbData.id||STATE.pembeli[k]===pbData)||'') : '';
+
+      return `<div class="card mb8" style="border-left:4px solid ${idx===0?'#f59e0b':idx===1?'#9ca3af':idx===2?'#cd7c3f':'var(--border)'};">
+        <div style="display:flex;align-items:flex-start;gap:12px;">
+          <div style="font-size:${idx<3?'24px':'16px'};min-width:32px;text-align:center;padding-top:2px;">${medal}</div>
+          <div style="flex:1;min-width:0;">
+            <div style="display:flex;justify-content:space-between;align-items:flex-start;">
+              <div>
+                <div style="font-weight:700;font-size:13px;">${p.nama}</div>
+                <div style="font-size:11px;color:var(--muted);">${p.hp||'—'} · ${p.count} transaksi</div>
+              </div>
+              <div style="text-align:right;">
+                <div style="font-weight:800;font-size:15px;color:var(--g2);">${fmt(p.total)}</div>
+                <div style="font-size:10px;color:var(--muted);">${pct}% dari total</div>
+              </div>
+            </div>
+            <!-- Progress bar -->
+            <div style="height:4px;background:#f0f0f0;border-radius:2px;margin:8px 0;">
+              <div style="height:4px;background:${idx===0?'#f59e0b':idx===1?'#9ca3af':idx===2?'#cd7c3f':'var(--g4)'};border-radius:2px;width:${pct}%;"></div>
+            </div>
+            <div style="display:flex;justify-content:space-between;align-items:center;">
+              <div style="font-size:11px;color:var(--muted);">
+                ${topProd?`Produk fav: <b>${topProd.nama}</b> (${topProd.qty} pcs)`:''}
+              </div>
+              <div style="display:flex;gap:6px;align-items:center;">
+                ${hutang>0?`<span class="badge bg-red">Hutang ${fmt(hutang)}</span>`:''}
+                ${pbKey?`<button class="btn btn-sm btn-outline" style="padding:3px 7px;" onclick="openEditPb('${pbKey}')">✏️</button>`:''}
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>`;
+    }).join('') +
+    (sorted.length>10 ? `
+    <button class="btn btn-outline btn-full" onclick="toggleShowAllTop()" style="margin-top:4px;">
+      ${showAllTop ? '▲ Tampilkan 10 Teratas' : `▼ Tampilkan Semua (${sorted.length} customer)`}
+    </button>` : '');
+}
+window.renderTopCustomer=renderTopCustomer;
+
+window.toggleShowAllTop = function(){
+  showAllTop = !showAllTop;
+  renderTopCustomer();
+};
 const KATEGORI_LABEL = {
   hpp:'🐟 HPP Barang', ongkir:'🚚 Ongkir', capex:'🏪 CAPEX',
   opex_packging:'📦 Packaging', opex_listrik:'💡 Listrik',
