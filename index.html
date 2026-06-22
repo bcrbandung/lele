@@ -445,7 +445,7 @@ tr:last-child td{border-bottom:none;}
             <option value="qris">📱 QRIS</option>
             <option value="tunai">💵 Tunai</option>
             <option value="transfer">🏦 Transfer</option>
-            <option value="others">💳 Lainnya</option>
+            <option value="others">🏦 Transfer</option>
           </select>
         </div>
         <div id="setor-info" style="background:var(--gpale);border-radius:8px;padding:10px 12px;margin-bottom:12px;font-size:12px;"></div>
@@ -467,7 +467,7 @@ tr:last-child td{border-bottom:none;}
         <button class="pill" onclick="filterKasHistory('qris',this)">📱 QRIS</button>
         <button class="pill" onclick="filterKasHistory('tunai',this)">💵 Tunai</button>
         <button class="pill" onclick="filterKasHistory('transfer',this)">🏦 Transfer</button>
-        <button class="pill" onclick="filterKasHistory('others',this)">💳 Lainnya</button>
+        <button class="pill" onclick="filterKasHistory('others',this)">🏦 Transfer</button>
       </div>
       <div id="kas-history-content"></div>
     </div>
@@ -519,17 +519,31 @@ tr:last-child td{border-bottom:none;}
     </div>
     <div class="fg"><label class="fl">Produk & Jumlah</label><div id="j-items"></div><button onclick="addRow('j-items','jual')" class="btn btn-sm btn-outline mt8">+ Produk</button></div>
     <div class="fg">
+      <label class="fl">Diskon (opsional)</label>
+      <div class="form-row">
+        <div class="input-group">
+          <div class="ia">Rp</div>
+          <input type="number" class="fc" id="j-diskon-rp" placeholder="0" min="0" oninput="syncDiskonRp()">
+        </div>
+        <div class="input-group">
+          <input type="number" class="fc" id="j-diskon-pct" placeholder="%" min="0" max="100" oninput="syncDiskonPct()" style="border-radius:8px 0 0 8px;">
+          <div class="ia" style="border-left:none;border-radius:0 8px 8px 0;">%</div>
+        </div>
+      </div>
+    </div>
+    <div class="fg">
       <label class="fl">Metode Pembayaran</label>
       <div class="pay-group" id="j-pay-group">
         <button class="pay-pill active" data-pay="tunai" onclick="selectPay(this,'j-pay-group')">💵 Tunai</button>
         <button class="pay-pill" data-pay="qris" onclick="selectPay(this,'j-pay-group')">📱 QRIS</button>
         <button class="pay-pill hutang" data-pay="hutang" onclick="selectPay(this,'j-pay-group')">📒 Hutang</button>
-        <button class="pay-pill" data-pay="others" onclick="selectPay(this,'j-pay-group')">💳 Lainnya</button>
+        <button class="pay-pill" data-pay="others" onclick="selectPay(this,'j-pay-group')">🏦 Transfer</button>
       </div>
     </div>
     <div class="fg"><label class="fl">Catatan</label><input type="text" class="fc" id="j-catatan" placeholder="Opsional"></div>
     <div class="sum-box">
       <div class="sum-row"><span class="muted">Total item</span><span id="j-total-item">0 pcs</span></div>
+      <div class="sum-row" id="j-diskon-row" style="display:none;"><span class="muted" style="color:var(--red);">Diskon</span><span id="j-diskon-display" style="color:var(--red);">- Rp 0</span></div>
       <div class="sum-total"><span>Total Bayar</span><span id="j-total-harga">Rp 0</span></div>
     </div>
     <button class="btn btn-primary btn-full" onclick="simpanJual()">💾 Simpan Penjualan</button>
@@ -588,7 +602,7 @@ tr:last-child td{border-bottom:none;}
         <button class="pay-pill active" data-pay="tunai" onclick="selectPay(this,'ap-pay-group')">💵 Tunai</button>
         <button class="pay-pill" data-pay="qris" onclick="selectPay(this,'ap-pay-group')">📱 QRIS</button>
         <button class="pay-pill hutang" data-pay="hutang" onclick="selectPay(this,'ap-pay-group')">📒 Hutang</button>
-        <button class="pay-pill" data-pay="others" onclick="selectPay(this,'ap-pay-group')">💳 Lainnya</button>
+        <button class="pay-pill" data-pay="others" onclick="selectPay(this,'ap-pay-group')">🏦 Transfer</button>
       </div>
     </div>
     <div class="fg"><label class="fl">Tanggal Bayar</label><input type="date" class="fc" id="ap-tgl"></div>
@@ -641,7 +655,7 @@ tr:last-child td{border-bottom:none;}
         <button class="pay-pill active" data-pay="tunai" onclick="selectPay(this,'ln-pay-group')">💵 Tunai</button>
         <button class="pay-pill" data-pay="qris" onclick="selectPay(this,'ln-pay-group')">📱 QRIS</button>
         <button class="pay-pill" data-pay="transfer" onclick="selectPay(this,'ln-pay-group')">🏦 Transfer</button>
-        <button class="pay-pill" data-pay="others" onclick="selectPay(this,'ln-pay-group')">💳 Lainnya</button>
+        <button class="pay-pill" data-pay="others" onclick="selectPay(this,'ln-pay-group')">🏦 Transfer</button>
       </div>
     </div>
     <div class="fg"><label class="fl">Tanggal Lunas</label><input type="date" class="fc" id="ln-tgl"></div>
@@ -701,7 +715,7 @@ tr:last-child td{border-bottom:none;}
         <option value="tunai">💵 Tunai</option>
         <option value="transfer">🏦 Transfer</option>
         <option value="qris">📱 QRIS</option>
-        <option value="others">💳 Lainnya</option>
+        <option value="others">🏦 Transfer</option>
       </select>
     </div>
     <button class="btn btn-red btn-full" onclick="simpanPengeluaran()">💾 Simpan Pengeluaran</button>
@@ -873,7 +887,7 @@ tr:last-child td{border-bottom:none;}
         <button class="pay-pill active" data-pay="tunai" onclick="selectPay(this,'edit-pay-group')">💵 Tunai</button>
         <button class="pay-pill" data-pay="qris" onclick="selectPay(this,'edit-pay-group')">📱 QRIS</button>
         <button class="pay-pill hutang" data-pay="hutang" onclick="selectPay(this,'edit-pay-group')">📒 Hutang</button>
-        <button class="pay-pill" data-pay="others" onclick="selectPay(this,'edit-pay-group')">💳 Lainnya</button>
+        <button class="pay-pill" data-pay="others" onclick="selectPay(this,'edit-pay-group')">🏦 Transfer</button>
       </div>
     </div>
     <div class="fg" id="edit-biaya-wrap" style="display:none;">
@@ -921,6 +935,8 @@ var pickSuggest = function(nama,hp,inputId,kontakId,suggestId){ var i=document.g
 var calcJual = function(){};
 var calcBooking = function(){};
 var calcBiayaMasuk = function(){};
+var syncDiskonRp = function(){};
+var syncDiskonPct = function(){};
 var calcRekon = function(){};
 var calcEdit = function(){};
 var loadRekon = function(){};
@@ -1018,7 +1034,7 @@ const fmtD  = d => new Date(d).toLocaleDateString('id-ID',{day:'numeric',month:'
 const today = () => new Date().toISOString().substr(0,10);
 const prodOpts = () => `<option value="">— Produk —</option>`+PRODS.map(p=>`<option value="${p.id}" data-price="${p.price}">${p.icon} ${p.name}${p.allowZeroStock?' [PO]':''} (${fmt(p.price)})</option>`).join('');
 
-const PAY_LABEL = {tunai:'💵 Tunai', qris:'📱 QRIS', hutang:'📒 Hutang', transfer:'🏦 Transfer', others:'💳 Lainnya'};
+const PAY_LABEL = {tunai:'💵 Tunai', qris:'📱 QRIS', hutang:'📒 Hutang', transfer:'🏦 Transfer', others:'🏦 Transfer'};
 
 function setSyncStatus(s) {
   document.getElementById('sync-dot').className='sync-dot '+s;
@@ -1120,6 +1136,8 @@ function initModal(id){
   if(id==='mo-jual'){
     document.getElementById('j-tgl').value=today();
     ['j-pembeli','j-kontak','j-catatan'].forEach(i=>document.getElementById(i).value='');
+    document.getElementById('j-diskon-rp').value='';
+    document.getElementById('j-diskon-pct').value='';
     document.getElementById('j-items').innerHTML=''; addRow('j-items','jual'); calcJual();
     setupPembeliInput('j-pembeli','j-kontak','pb-dl');
     document.querySelector('#j-pay-group .pay-pill[data-pay="tunai"]').classList.add('active');
@@ -1314,9 +1332,56 @@ function calcTotal(containerId){
   });
   return {total,items};
 }
-function calcJual(){ const r=calcTotal('j-items'); document.getElementById('j-total-harga').textContent=fmt(r.total); document.getElementById('j-total-item').textContent=r.items+' pcs'; }
 function calcBooking(){ const r=calcTotal('bk-items'); document.getElementById('bk-total-harga').textContent=fmt(r.total); document.getElementById('bk-total-item').textContent=r.items+' pcs'; }
-window.calcJual=calcJual; window.calcBooking=calcBooking;
+window.calcBooking=calcBooking;
+function calcJual(){
+  let subtotal=0, items=0;
+  document.querySelectorAll('#j-items .item-row').forEach(row=>{
+    const qty=parseInt(row.querySelector('input').value)||0;
+    const price=parseInt(row.querySelector('select').selectedOptions[0]?.dataset?.price||0);
+    subtotal+=price*qty; items+=qty;
+  });
+  const diskonRp = parseInt(document.getElementById('j-diskon-rp')?.value)||0;
+  const total = Math.max(0, subtotal - diskonRp);
+  document.getElementById('j-total-harga').textContent=fmt(total);
+  document.getElementById('j-total-item').textContent=items+' pcs';
+  const drow = document.getElementById('j-diskon-row');
+  const ddisp = document.getElementById('j-diskon-display');
+  if(drow && ddisp){
+    drow.style.display = diskonRp>0 ? 'flex' : 'none';
+    ddisp.textContent = '− '+fmt(diskonRp);
+  }
+  return {subtotal, diskonRp, total};
+}
+window.calcJual=calcJual;
+
+function syncDiskonRp(){
+  // User input Rp → hitung %
+  const sub = Array.from(document.querySelectorAll('#j-items .item-row')).reduce((s,row)=>{
+    const qty=parseInt(row.querySelector('input').value)||0;
+    const price=parseInt(row.querySelector('select').selectedOptions[0]?.dataset?.price||0);
+    return s+price*qty;
+  },0);
+  const rp = parseInt(document.getElementById('j-diskon-rp').value)||0;
+  const pctEl = document.getElementById('j-diskon-pct');
+  if(sub>0 && pctEl) pctEl.value = rp>0 ? (rp/sub*100).toFixed(1) : '';
+  calcJual();
+}
+window.syncDiskonRp=syncDiskonRp;
+
+function syncDiskonPct(){
+  // User input % → hitung Rp
+  const sub = Array.from(document.querySelectorAll('#j-items .item-row')).reduce((s,row)=>{
+    const qty=parseInt(row.querySelector('input').value)||0;
+    const price=parseInt(row.querySelector('select').selectedOptions[0]?.dataset?.price||0);
+    return s+price*qty;
+  },0);
+  const pct = parseFloat(document.getElementById('j-diskon-pct').value)||0;
+  const rpEl = document.getElementById('j-diskon-rp');
+  if(rpEl) rpEl.value = pct>0 ? Math.round(sub*pct/100) : '';
+  calcJual();
+}
+window.syncDiskonPct=syncDiskonPct;
 
 function getItemsFromContainer(cid){
   const items=[]; let ok=true;
@@ -1345,12 +1410,14 @@ async function simpanJual(){
       alert(`Stok ${i.nama} kurang!\nAda: ${STATE.stok[i.prodId]||0}, Minta: ${i.qty}`); return;
     }
   }
-  const total=items.reduce((s,i)=>s+i.qty*i.harga,0);
+  const subtotal=items.reduce((s,i)=>s+i.qty*i.harga,0);
+  const diskonRp=parseInt(document.getElementById('j-diskon-rp').value)||0;
+  const total=Math.max(0,subtotal-diskonRp);
   setSyncStatus('syncing');
   try{
     const id=genId();
     const isHutang=metodeBayar==='hutang';
-    const tx={id,tipe:'penjualan',tanggal:tgl,pembeli,kontak,catatan,items,total:isHutang?0:total,totalAsli:total,metodeBayar,status:isHutang?'hutang':'lunas',createdAt:new Date().toISOString()};
+    const tx={id,tipe:'penjualan',tanggal:tgl,pembeli,kontak,catatan,items,total:isHutang?0:total,totalAsli:total,subtotal,diskon:diskonRp,metodeBayar,status:isHutang?'hutang':'lunas',createdAt:new Date().toISOString()};
     const writes=[set(ref(db,`tx/${id}`),tx)];
     items.forEach(i=>writes.push(set(ref(db,`stok/${i.prodId}`),(STATE.stok[i.prodId]||0)-i.qty)));
     if(isHutang){
@@ -2064,7 +2131,7 @@ function sumByMetode(incomes){
   return r;
 }
 const QRIS_FEE = 0.007;
-const METODE_LABEL = {qris:'📱 QRIS', tunai:'💵 Tunai', transfer:'🏦 Transfer', others:'💳 Lainnya'};
+const METODE_LABEL = {qris:'📱 QRIS', tunai:'💵 Tunai', transfer:'🏦 Transfer', others:'🏦 Transfer'};
 let kasHistoryFilter = 'semua';
 
 function getSetoranArray(){ return Object.values(STATE.setoran||{}).sort((a,b)=>new Date(b.createdAt)-new Date(a.createdAt)); }
