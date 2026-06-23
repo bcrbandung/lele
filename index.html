@@ -1045,17 +1045,17 @@ const app = initializeApp(firebaseConfig);
 const db  = getDatabase(app);
 
 const PRODS = [
-  {id:'LF', name:'Lele Fillet 300gr',       price:33000, hargaBeli:20000, icon:'🐟'},
-  {id:'LFB',name:'Lele Fillet Bumbu 300gr', price:33000, hargaBeli:20000, icon:'🌶️'},
-  {id:'LBF',name:'Lele Butterfly',           price:33000, hargaBeli:20000, icon:'🦋'},
-  {id:'LH4',name:'Lele Headless isi 4',      price:26000, hargaBeli:16000, icon:'🐠'},
-  {id:'NL', name:'Nugget Lele',              price:28000, hargaBeli:18000, icon:'🍗'},
-  {id:'KL', name:'Katsu Lele',               price:35000, hargaBeli:22000, icon:'🍱'},
-  {id:'LA', name:'Lele Asap',                price:38000, hargaBeli:24000, icon:'💨'},
-  {id:'NB', name:'Nila Bumbu',               price:43000, hargaBeli:28000, icon:'🐡'},
-  {id:'TP', name:'Tahu Pananya',             price:13000, hargaBeli:8000,  icon:'🟨', allowZeroStock:true},
-  {id:'SI10',name:'Siomay isi 10',           price:26000, hargaBeli:16000, icon:'🥟'},
-  {id:'SI20',name:'Siomay isi 20',           price:46000, hargaBeli:28000, icon:'🥟'},
+  {id:'LF', name:'Lele Fillet 300gr',       price:33000, hargaBeli:27500, icon:'🐟'},
+  {id:'LFB',name:'Lele Fillet Bumbu 300gr', price:33000, hargaBeli:27500, icon:'🌶️'},
+  {id:'LBF',name:'Lele Butterfly',           price:33000, hargaBeli:27500, icon:'🦋'},
+  {id:'LH4',name:'Lele Headless isi 4',      price:26000, hargaBeli:21000, icon:'🐠'},
+  {id:'NL', name:'Nugget Lele',              price:28000, hargaBeli:22000, icon:'🍗'},
+  {id:'KL', name:'Katsu Lele',               price:35000, hargaBeli:29500, icon:'🍱'},
+  {id:'LA', name:'Lele Asap',                price:38000, hargaBeli:32000, icon:'💨'},
+  {id:'NB', name:'Nila Bumbu',               price:43000, hargaBeli:38000, icon:'🐡'},
+  {id:'TP', name:'Tahu Pananya',             price:13000, hargaBeli:9000,  icon:'🟨', allowZeroStock:true},
+  {id:'SI10',name:'Siomay isi 10',           price:26000, hargaBeli:22000, icon:'🥟'},
+  {id:'SI20',name:'Siomay isi 20',           price:46000, hargaBeli:41000, icon:'🥟'},
 ];
 
 let STATE = {tx:{}, konsinyasi:{}, pembeli:{}, stok:{}, stokKon:{}, booking:{}, piutang:{}, setoran:{}, pengeluaran:{}, pmasukanLain:{}};
@@ -3331,6 +3331,44 @@ async function cleanupDuplicatePembeli(){
   }
 }
 
+// Patch TX pembelian lama — recalculate subtotal berdasarkan harga beli terbaru
+let patchDone = false;
+async function patchHargaBeli(){
+  if(patchDone) return;
+  patchDone = true;
+  const txPembelian = Object.entries(STATE.tx).filter(([k,t])=>t.tipe==='pembelian'&&t.items);
+  if(!txPembelian.length) return;
+  const writes = [];
+  txPembelian.forEach(([key,tx])=>{
+    // Recalculate subtotal dari harga beli terbaru
+    let subtotalBaru = 0;
+    tx.items.forEach(i=>{
+      const p = PRODS.find(x=>x.id===i.prodId);
+      subtotalBaru += (p?p.hargaBeli:i.hargaBeli||0) * i.qty;
+    });
+    // Update items hargaBeli juga
+    const itemsBaru = tx.items.map(i=>{
+      const p = PRODS.find(x=>x.id===i.prodId);
+      return {...i, hargaBeli: p?p.hargaBeli:i.hargaBeli||0};
+    });
+    const diskon = tx.diskon||0;
+    const totalBaru = Math.max(0, subtotalBaru - diskon);
+    // Hanya update kalau berbeda
+    if(subtotalBaru !== (tx.subtotal||tx.biaya||0)){
+      writes.push(update(ref(db,`tx/${key}`),{
+        subtotal: subtotalBaru,
+        biaya: totalBaru,
+        total: -totalBaru,
+        items: itemsBaru
+      }));
+    }
+  });
+  if(writes.length){
+    await Promise.all(writes).catch(()=>{});
+    console.log(`Patched ${writes.length} TX pembelian dengan harga beli terbaru`);
+  }
+}
+
 // Sembunyikan loading saat data pertama masuk
 onValue(ref(db,'stok'), snap=>{
   STATE.stok=snap.val()||{};
@@ -3350,8 +3388,9 @@ onValue(ref(db,'pmasukanLain'),snap=>{STATE.pmasukanLain=snap.val()||{};renderCu
 onValue(ref(db,'tx'), snap=>{
   STATE.tx=snap.val()||{};
   renderCurrentPage();
-  // Sync setelah pembeli juga loaded
   if(Object.keys(STATE.pembeli).length>=0) syncPembeliFromTx();
+  // Patch harga beli lama sekali
+  if(!patchDone && Object.keys(STATE.tx).length>0) patchHargaBeli();
 });
 
 onValue(ref(db,'pembeli'), snap=>{
