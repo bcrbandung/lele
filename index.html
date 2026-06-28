@@ -1077,10 +1077,14 @@ function setSyncStatus(s) {
 
 function getTxArray(){ 
   return Object.entries(STATE.tx)
-    .map(([k,v])=>({...v,_key:k,id:v.id||k}))
+    .map(([k,v])=>{
+      const obj = {...v, _key:k, id:v.id||k};
+      // Tanggal efektif: pakai tanggalLunas untuk hutang yang sudah lunas
+      obj._tanggalSort = (v.tanggalLunas && v.status==='lunas') ? v.tanggalLunas : v.tanggal;
+      return obj;
+    })
     .sort((a,b)=>{
-      // Sort by tanggal first, then createdAt
-      const tglDiff = new Date(b.tanggal) - new Date(a.tanggal);
+      const tglDiff = new Date(b._tanggalSort) - new Date(a._tanggalSort);
       if(tglDiff!==0) return tglDiff;
       return new Date(b.createdAt) - new Date(a.createdAt);
     });
