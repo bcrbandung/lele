@@ -1075,7 +1075,16 @@ function setSyncStatus(s) {
   document.getElementById('sync-status').textContent = s===''?'Terhubung':s==='syncing'?'Menyimpan...':'Offline';
 }
 
-function getTxArray()      { return Object.entries(STATE.tx).map(([k,v])=>({...v,_key:k,id:v.id||k})).sort((a,b)=>new Date(b.createdAt)-new Date(a.createdAt)); }
+function getTxArray(){ 
+  return Object.entries(STATE.tx)
+    .map(([k,v])=>({...v,_key:k,id:v.id||k}))
+    .sort((a,b)=>{
+      // Sort by tanggal first, then createdAt
+      const tglDiff = new Date(b.tanggal) - new Date(a.tanggal);
+      if(tglDiff!==0) return tglDiff;
+      return new Date(b.createdAt) - new Date(a.createdAt);
+    });
+}
 function getKonArray()     { return Object.entries(STATE.konsinyasi||{}).map(([k,v])=>({...v,_key:k,id:v.id||k})); }
 function getPbArray()      { return Object.entries(STATE.pembeli||{}).map(([k,v])=>({...v,_key:k,id:v.id||k})); }
 function getBookingArray() { return Object.entries(STATE.booking||{}).map(([k,v])=>({...v,_key:k,id:v.id||k})).sort((a,b)=>new Date(b.createdAt)-new Date(a.createdAt)); }
